@@ -4,7 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository status
 
-This repository is currently empty (no commits, no source files). There is no existing build system, test suite, or architecture to document yet. Update this file as real code, structure, and tooling get added so future guidance stays accurate.
+- `pet_widget.py` — Windows-only desktop pet widget (stdlib-only: `tkinter` + `ctypes.windll`) that follows the system mouse cursor around the screen with a borderless, click-through, always-on-top transparent window. No pip dependencies.
+- `run_pet_widget.bat` — launcher for `pet_widget.py`. Uses `chcp 65001` + BOM-less UTF-8 per the BAT encoding guideline below.
+
+Run with: `python pet_widget.py` (or double-click `run_pet_widget.bat`) on Windows. Right-click the pet to quit. There is no build step, package manifest, or test suite yet — this container is headless Linux, so widget behavior can only be syntax-checked here (`python3 -m py_compile pet_widget.py`); functional verification requires an actual Windows desktop session. Update this file as more real code, structure, and tooling get added so future guidance stays accurate.
 
 ## Coding guidelines
 
