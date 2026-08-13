@@ -38,11 +38,16 @@ BLINK_MAX_INTERVAL = 5.0      # 눈 깜빡임 최대 간격(초)
 BLINK_DURATION = 0.12         # 눈 깜빡임 지속 시간(초)
 
 BG_KEY_COLOR = "magenta"      # 투명 처리할 배경 색 (펫 그림에는 쓰지 않음)
-BODY_COLOR = "#FFB37B"
-BODY_OUTLINE = "#E68A4E"
-EAR_COLOR = "#FFB37B"
-BLUSH_COLOR = "#FF9E9E"
+
+# 몬치치풍 크림색 원숭이 캐릭터 색상
+BODY_COLOR = "#EFD9B4"
+BODY_OUTLINE = "#C9A876"
+EAR_COLOR = "#EFD9B4"
+EAR_INNER_COLOR = "#FBEEDA"
+MUZZLE_COLOR = "#FBEEDA"
+HAIR_COLOR = "#8B5E3C"
 EYE_COLOR = "#2B2B2B"
+EYE_HIGHLIGHT_COLOR = "#FFFFFF"
 
 
 def _set_dpi_awareness():
@@ -104,32 +109,47 @@ class DesktopPet:
     def _build_face(self):
         c = self.canvas
         cx, cy = PET_SIZE / 2, PET_SIZE / 2
-        r = PET_SIZE * 0.38
+        r = PET_SIZE * 0.333
 
-        # 귀
-        c.create_polygon(
-            cx - r * 0.9, cy - r * 0.6, cx - r * 0.3, cy - r * 1.5, cx - r * 0.1, cy - r * 0.5,
-            fill=EAR_COLOR, outline=BODY_OUTLINE,
-        )
-        c.create_polygon(
-            cx + r * 0.9, cy - r * 0.6, cx + r * 0.3, cy - r * 1.5, cx + r * 0.1, cy - r * 0.5,
-            fill=EAR_COLOR, outline=BODY_OUTLINE,
-        )
+        # 귀 (좌우로 크고 둥글게 튀어나온 원숭이 귀)
+        ear_r = r * 0.46
+        ear_cx = r * 0.95
+        ear_cy = -r * 0.15
+        for side in (-1, 1):
+            ecx = cx + side * ear_cx
+            ecy = cy + ear_cy
+            c.create_oval(
+                ecx - ear_r, ecy - ear_r, ecx + ear_r, ecy + ear_r,
+                fill=EAR_COLOR, outline=BODY_OUTLINE, width=2,
+            )
+            inner_r = ear_r * 0.55
+            c.create_oval(
+                ecx - inner_r, ecy - inner_r, ecx + inner_r, ecy + inner_r,
+                fill=EAR_INNER_COLOR, outline="",
+            )
 
         # 얼굴
         self.face = c.create_oval(
             cx - r, cy - r, cx + r, cy + r, fill=BODY_COLOR, outline=BODY_OUTLINE, width=2
         )
 
-        # 볼터치
-        c.create_oval(cx - r * 0.85, cy + r * 0.15, cx - r * 0.4, cy + r * 0.5, fill=BLUSH_COLOR, outline="")
-        c.create_oval(cx + r * 0.4, cy + r * 0.15, cx + r * 0.85, cy + r * 0.5, fill=BLUSH_COLOR, outline="")
+        # 정수리의 뿔 모양 털 (몬치치 트레이드마크)
+        c.create_polygon(
+            cx - r * 0.14, cy - r * 0.95, cx, cy - r * 1.35, cx + r * 0.14, cy - r * 0.95,
+            fill=HAIR_COLOR, outline="",
+        )
+
+        # 주둥이(입 주변 밝은 패치)
+        c.create_oval(
+            cx - r * 0.42, cy + r * 0.05, cx + r * 0.42, cy + r * 0.62,
+            fill=MUZZLE_COLOR, outline="",
+        )
 
         # 눈 (깜빡임을 위해 좌표 저장)
-        eye_r = r * 0.15
-        self.eye_cx_l = cx - r * 0.38
-        self.eye_cx_r = cx + r * 0.38
-        self.eye_cy = cy - r * 0.05
+        eye_r = r * 0.19
+        self.eye_cx_l = cx - r * 0.4
+        self.eye_cx_r = cx + r * 0.4
+        self.eye_cy = cy - r * 0.1
         self.eye_r = eye_r
         self.eye_l = c.create_oval(
             self.eye_cx_l - eye_r, self.eye_cy - eye_r, self.eye_cx_l + eye_r, self.eye_cy + eye_r,
@@ -139,10 +159,27 @@ class DesktopPet:
             self.eye_cx_r - eye_r, self.eye_cy - eye_r, self.eye_cx_r + eye_r, self.eye_cy + eye_r,
             fill=EYE_COLOR, outline="",
         )
+        highlight_r = eye_r * 0.32
+        self.highlight_l = c.create_oval(
+            self.eye_cx_l - eye_r * 0.3, self.eye_cy - eye_r * 0.5,
+            self.eye_cx_l - eye_r * 0.3 + highlight_r, self.eye_cy - eye_r * 0.5 + highlight_r,
+            fill=EYE_HIGHLIGHT_COLOR, outline="",
+        )
+        self.highlight_r_item = c.create_oval(
+            self.eye_cx_r - eye_r * 0.3, self.eye_cy - eye_r * 0.5,
+            self.eye_cx_r - eye_r * 0.3 + highlight_r, self.eye_cy - eye_r * 0.5 + highlight_r,
+            fill=EYE_HIGHLIGHT_COLOR, outline="",
+        )
+
+        # 코
+        c.create_oval(
+            cx - r * 0.07, cy + r * 0.16, cx + r * 0.07, cy + r * 0.28,
+            fill=BODY_OUTLINE, outline="",
+        )
 
         # 입
         c.create_arc(
-            cx - r * 0.22, cy + r * 0.15, cx + r * 0.22, cy + r * 0.5,
+            cx - r * 0.22, cy + r * 0.26, cx + r * 0.22, cy + r * 0.58,
             start=200, extent=140, style=tk.ARC, outline=BODY_OUTLINE, width=2,
         )
 
@@ -150,9 +187,11 @@ class DesktopPet:
         c = self.canvas
         r = self.eye_r
         if closed:
-            # 감은 눈: 얇은 가로선처럼 보이도록 높이를 줄임
+            # 감은 눈: 얇은 가로선처럼 보이도록 높이를 줄이고, 하이라이트는 숨김
             c.coords(self.eye_l, self.eye_cx_l - r, self.eye_cy - 1, self.eye_cx_l + r, self.eye_cy + 1)
             c.coords(self.eye_r_item, self.eye_cx_r - r, self.eye_cy - 1, self.eye_cx_r + r, self.eye_cy + 1)
+            c.itemconfigure(self.highlight_l, state="hidden")
+            c.itemconfigure(self.highlight_r_item, state="hidden")
         else:
             dx = max(-PUPIL_MAX_OFFSET, min(PUPIL_MAX_OFFSET, pupil_dx))
             dy = max(-PUPIL_MAX_OFFSET, min(PUPIL_MAX_OFFSET, pupil_dy))
@@ -166,6 +205,8 @@ class DesktopPet:
                 self.eye_cx_r - r + dx, self.eye_cy - r + dy,
                 self.eye_cx_r + r + dx, self.eye_cy + r + dy,
             )
+            c.itemconfigure(self.highlight_l, state="normal")
+            c.itemconfigure(self.highlight_r_item, state="normal")
 
     def _tick(self):
         now = time.time()
