@@ -9,7 +9,11 @@ import type { User } from "@/lib/types";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(getStoredUser());
+  // Starts null (matching the server-rendered HTML) and is filled in after
+  // mount — reading localStorage in the useState initializer would return
+  // different values on the server vs. the client's first render and cause
+  // a hydration mismatch.
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     const token = getToken();
@@ -17,6 +21,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
+    setUser(getStoredUser());
     apiGet<{ data: User }>("/auth/me")
       .then((res) => {
         setUser(res.data);

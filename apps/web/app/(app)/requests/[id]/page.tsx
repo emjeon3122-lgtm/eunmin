@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { apiGet, apiPost, ApiError, resolveFileUrl } from "@/lib/api";
 import { StatusTracker } from "@/components/StatusTracker";
 import { occasionWithRequestType, formatDateTime } from "@/lib/labels";
 import type { WreathRequestDetail } from "@/lib/types";
@@ -99,7 +99,7 @@ export default function WreathRequestDetailPage() {
           {request.completionPhotoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={request.completionPhotoUrl}
+              src={resolveFileUrl(request.completionPhotoUrl) ?? undefined}
               alt="배송완료 사진"
               className="mt-3 max-h-96 w-full rounded-md object-contain"
             />

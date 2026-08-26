@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { WreathRequestsService } from '../wreath-requests/wreath-requests.service';
 import { InvalidStatusTransitionException, NotFoundApiException } from '../common/exceptions/api.exception';
 import { ListAdminWreathRequestsQueryDto } from './dto/list-admin-wreath-requests.dto';
 import { DeliveryStatusDto } from './dto/delivery-status.dto';
@@ -11,6 +12,7 @@ export class AdminWreathRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly wreathRequestsService: WreathRequestsService,
   ) {}
 
   // GET /api/admin/wreath-requests — filterable per the doc 03 section 2-4 wireframe.
@@ -53,7 +55,53 @@ export class AdminWreathRequestsService {
       }),
       this.prisma.wreathRequest.count({ where }),
     ]);
-    return { items, total };
+    // Flatten requester.{name,department} to top-level requesterName/department
+    // to match the admin detail endpoint's shape (and the doc 03 §2-4 table columns).
+    const flattened = items.map(({ requester, ...rest }) => ({
+      ...rest,
+      requesterName: requester.name,
+      department: requester.department,
+      requesterEmployeeNo: requester.employeeNo,
+    }));
+    return { items: flattened, total };
+  }
+
+  // GET /api/admin/wreath-requests/{id} — admin detail view (doc 03 section
+  // 2-5): the employee-facing detail shape plus requester identity, the
+  // pre-approval attachment link, and the full transmission log (not just
+  // the latest attempt).
+  async findOneForAdmin(id: string) {
+    const request = await this.prisma.wreathRequest.findUnique({
+      where: { id },
+      include: { requester: true, attachment: true },
+    });
+    if (!request) {
+      throw new NotFoundApiException('신청을 찾을 수 없습니다.');
+    }
+
+    const [detail, transmissions] = await Promise.all([
+      this.wreathRequestsService.toDetail(request),
+      this.prisma.orderTransmission.findMany({
+        where: { requestId: id },
+        orderBy: { attemptedAt: 'desc' },
+      }),
+    ]);
+
+    return {
+      ...detail,
+      requesterName: request.requester.name,
+      department: request.requester.department,
+      attachmentUrl: request.attachment?.fileUrl ?? null,
+      attachmentFileName: request.attachment?.fileName ?? null,
+      orderTransmissions: transmissions.map((t) => ({
+        id: t.id,
+        channel: t.channel,
+        status: t.status,
+        providerMessageId: t.providerMessageId,
+        responseBody: t.responseBody,
+        attemptedAt: t.attemptedAt,
+      })),
+    };
   }
 
   async cancel(id: string, reason: string) {

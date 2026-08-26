@@ -16,6 +16,11 @@ export class AdminWreathRequestsController {
     return { data: items, meta: { total, page: query.page, size: query.size } };
   }
 
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.findOneForAdmin(id);
+  }
+
   @Post(':id/cancel')
   cancel(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminCancelDto) {
     return this.service.cancel(id, dto.reason);

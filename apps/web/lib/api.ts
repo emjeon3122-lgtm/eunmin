@@ -3,6 +3,17 @@ import { getToken } from "./auth";
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api";
 
+// File URLs (attachments, completion photos) come back as paths relative to
+// the API's origin (e.g. "/uploads/xxx.png"), served outside the "/api"
+// prefix — resolve them against the API origin, not the frontend's own.
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
+
+export function resolveFileUrl(path?: string | null): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_ORIGIN}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
 export class ApiError extends Error {
   code: string;
   status: number;

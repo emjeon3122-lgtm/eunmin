@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiGet, apiPatch, apiPost, ApiError } from "@/lib/api";
+import { apiGet, apiPatch, apiPost, ApiError, resolveFileUrl } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import { occasionWithRequestType, formatDateTime } from "@/lib/labels";
 import type { AdminWreathRequestDetail } from "@/lib/types";
@@ -106,7 +106,7 @@ export default function AdminWreathRequestDetailPage() {
             value=""
             valueNode={
               request.attachmentUrl ? (
-                <a href={request.attachmentUrl} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">
+                <a href={resolveFileUrl(request.attachmentUrl) ?? "#"} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">
                   {request.attachmentFileName ?? "증빙 파일 보기"}
                 </a>
               ) : (
