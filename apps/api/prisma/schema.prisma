@@ -1,0 +1,254 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  employee
+  admin
+}
+
+enum RequestType {
+  self
+  colleague
+  vendor_partner
+}
+
+enum OccasionType {
+  wedding
+  funeral
+  opening
+  etc
+}
+
+enum OccasionTypeFilter {
+  wedding
+  funeral
+  opening
+  etc
+  all
+}
+
+enum RequestStatus {
+  draft
+  submitted
+  submitted_to_vendor
+  accepted
+  completed
+  cancelled
+}
+
+enum AttachmentType {
+  pre_approval_proof
+  delivery_completion_photo
+}
+
+enum UploaderType {
+  employee
+  vendor
+}
+
+enum VendorChannelType {
+  kakao_friendtalk
+  kakao_alimtalk
+  api
+  email
+}
+
+enum FallbackChannel {
+  manual_admin_alert
+  sms
+  none
+}
+
+enum TransmissionChannel {
+  kakao_friendtalk
+  kakao_alimtalk
+  sms_fallback
+  api
+  email
+}
+
+enum TransmissionStatus {
+  pending
+  sent
+  failed
+  acked
+}
+
+enum NotificationChannel {
+  email
+  kakao_alimtalk
+  in_app
+}
+
+enum NotificationStatus {
+  sent
+  failed
+}
+
+model User {
+  id           String   @id @default(uuid())
+  employeeNo   String   @unique @map("employee_no")
+  name         String
+  department   String
+  email        String   @unique
+  phone        String?
+  ssoSubjectId String   @unique @map("sso_subject_id")
+  role         Role     @default(employee)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  wreathRequests     WreathRequest[] @relation("Requester")
+  cancelledRequests  WreathRequest[] @relation("CancelledBy")
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+model WreathRequest {
+  id                  String        @id @default(uuid())
+  requesterId         String        @map("requester_id")
+  requester           User          @relation("Requester", fields: [requesterId], references: [id])
+
+  requestType         RequestType   @map("request_type")
+  occasionType        OccasionType  @map("occasion_type")
+  recipientName       String        @map("recipient_name")
+  recipientPhone      String        @map("recipient_phone")
+  venueName           String        @map("venue_name")
+  deliveryAddress     String        @map("delivery_address")
+  deliveryDetail      String?       @map("delivery_detail")
+  desiredArrivalAt    DateTime      @map("desired_arrival_at")
+  ribbonMessage       String        @map("ribbon_message")
+  ribbonSenderText    String        @map("ribbon_sender_text")
+  declaredAmount      Int           @map("declared_amount")
+  memo                String?
+
+  requiresPreApproval Boolean       @default(false) @map("requires_pre_approval")
+  attachmentId        String?       @unique @map("attachment_id")
+  attachment          Attachment?   @relation("PreApprovalAttachment", fields: [attachmentId], references: [id])
+
+  status              RequestStatus @default(draft)
+
+  vendorId            String?       @map("vendor_id")
+  vendor              Vendor?       @relation(fields: [vendorId], references: [id])
+  productId           String?       @map("product_id")
+  product             Product?      @relation(fields: [productId], references: [id])
+
+  vendorStatusToken   String?       @unique @map("vendor_status_token")
+  acceptedAt          DateTime?     @map("accepted_at")
+  completionPhotoId   String?       @unique @map("completion_photo_id")
+  completionPhoto     Attachment?   @relation("CompletionPhoto", fields: [completionPhotoId], references: [id])
+  completedAt         DateTime?     @map("completed_at")
+  adminOverrideNote   String?       @map("admin_override_note")
+
+  cancelledById       String?       @map("cancelled_by")
+  cancelledBy         User?         @relation("CancelledBy", fields: [cancelledById], references: [id])
+  cancelledReason     String?       @map("cancelled_reason")
+  cancelledAt         DateTime?     @map("cancelled_at")
+
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  transmissions       OrderTransmission[]
+  notifications       Notification[]
+
+  @@map("wreath_requests")
+}
+
+model Attachment {
+  id           String         @id @default(uuid())
+  fileName     String         @map("file_name")
+  fileUrl      String         @map("file_url")
+  mimeType     String         @map("mime_type")
+  type         AttachmentType
+  uploaderType UploaderType   @map("uploader_type")
+  uploadedById String?        @map("uploaded_by")
+  uploadedAt   DateTime       @default(now()) @map("uploaded_at")
+
+  preApprovalFor WreathRequest? @relation("PreApprovalAttachment")
+  completionFor  WreathRequest? @relation("CompletionPhoto")
+
+  @@map("attachments")
+}
+
+model ApprovalRule {
+  id           String             @id @default(uuid())
+  occasionType OccasionTypeFilter @map("occasion_type")
+  minAmount    Int                @map("min_amount")
+  isActive     Boolean            @default(true) @map("is_active")
+  description  String?
+
+  @@map("approval_rules")
+}
+
+model Vendor {
+  id                       String            @id @default(uuid())
+  name                     String
+  channelType              VendorChannelType @map("channel_type")
+  contactPhone             String            @map("contact_phone")
+  kakaoChannelId           String?           @map("kakao_channel_id")
+  isChannelFriendConfirmed Boolean           @default(false) @map("is_channel_friend_confirmed")
+  fallbackChannel          FallbackChannel   @default(manual_admin_alert) @map("fallback_channel")
+  isActive                 Boolean           @default(true) @map("is_active")
+
+  products Product[]
+  requests WreathRequest[]
+
+  @@map("vendors")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  vendorId    String   @map("vendor_id")
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  name        String
+  price       Int
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+
+  requests WreathRequest[]
+
+  @@map("products")
+}
+
+model RibbonTemplate {
+  id           String       @id @default(uuid())
+  occasionType OccasionType @map("occasion_type")
+  phraseKo     String       @map("phrase_ko")
+  phraseHanja  String?      @map("phrase_hanja")
+  isActive     Boolean      @default(true) @map("is_active")
+
+  @@map("ribbon_templates")
+}
+
+model OrderTransmission {
+  id                String               @id @default(uuid())
+  requestId         String               @map("request_id")
+  request           WreathRequest        @relation(fields: [requestId], references: [id])
+  channel           TransmissionChannel
+  payload           Json
+  status            TransmissionStatus   @default(pending)
+  providerMessageId String?              @unique @map("provider_message_id")
+  responseBody      String?              @map("response_body")
+  attemptedAt       DateTime             @default(now()) @map("attempted_at")
+
+  @@map("order_transmissions")
+}
+
+model Notification {
+  id        String               @id @default(uuid())
+  userId    String               @map("user_id")
+  user      User                 @relation(fields: [userId], references: [id])
+  requestId String?              @map("request_id")
+  request   WreathRequest?       @relation(fields: [requestId], references: [id])
+  channel   NotificationChannel
+  message   String
+  status    NotificationStatus   @default(sent)
+  sentAt    DateTime             @default(now()) @map("sent_at")
+
+  @@map("notifications")
+}
