@@ -55,5 +55,7 @@ export class KakaoFriendTalkAdapter implements VendorAdapter {
 }
 
 function occasionLabel(type: string) {
-  return ({ wedding: '결혼', funeral: '부고', opening: '개업', etc: '기타' } as Record<string, string>)[type] ?? type;
+  return (
+    { wedding: '결혼', funeral: '부고', opening: '개업', promotion: '승진', etc: '기타' } as Record<string, string>
+  )[type] ?? type;
 }

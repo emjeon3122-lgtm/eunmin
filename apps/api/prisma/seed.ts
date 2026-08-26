@@ -118,6 +118,7 @@ async function main() {
     { occasionType: 'funeral' as const, phraseKo: '추모', phraseHanja: '追慕' },
     { occasionType: 'opening' as const, phraseKo: '축 개업', phraseHanja: '祝 開業' },
     { occasionType: 'opening' as const, phraseKo: '축 창립', phraseHanja: '祝 創立' },
+    { occasionType: 'promotion' as const, phraseKo: '축 승진', phraseHanja: '祝 昇進' },
   ];
   for (const t of ribbonDefs) {
     const existing = await prisma.ribbonTemplate.findFirst({

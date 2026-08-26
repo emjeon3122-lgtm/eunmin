@@ -4,6 +4,7 @@ const LABELS: Record<OccasionType, string> = {
   wedding: '결혼',
   funeral: '부고',
   opening: '개업',
+  promotion: '승진',
   etc: '기타',
 };
 

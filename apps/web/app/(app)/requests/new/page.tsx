@@ -16,7 +16,7 @@ const schema = z.object({
   requestType: z.enum(["self", "client"], {
     required_error: "신청 유형을 선택해주세요.",
   }),
-  occasionType: z.enum(["wedding", "funeral", "opening", "etc"], {
+  occasionType: z.enum(["wedding", "funeral", "opening", "promotion", "etc"], {
     required_error: "경조사 유형을 선택해주세요.",
   }),
   recipientName: z.string().min(1, "수령인 이름을 입력해주세요."),

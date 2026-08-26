@@ -7,7 +7,7 @@ import type { ApprovalRule, OccasionType, Product, Vendor } from "@/lib/types";
 
 const CHANNEL_TYPE_OPTIONS: Vendor["channelType"][] = ["kakao_friendtalk", "kakao_alimtalk", "api", "email"];
 const FALLBACK_CHANNEL_OPTIONS: Vendor["fallbackChannel"][] = ["manual_admin_alert", "sms", "none"];
-const RULE_OCCASION_OPTIONS: (OccasionType | "all")[] = ["all", "wedding", "funeral", "opening", "etc"];
+const RULE_OCCASION_OPTIONS: (OccasionType | "all")[] = ["all", "wedding", "funeral", "opening", "promotion", "etc"];
 
 export default function AdminSettingsPage() {
   return (

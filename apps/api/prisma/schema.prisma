@@ -21,6 +21,7 @@ enum OccasionType {
   wedding
   funeral
   opening
+  promotion
   etc
 }
 
@@ -28,6 +29,7 @@ enum OccasionTypeFilter {
   wedding
   funeral
   opening
+  promotion
   etc
   all
 }

@@ -13,7 +13,7 @@ export interface User {
 }
 
 export type RequestType = "self" | "client";
-export type OccasionType = "wedding" | "funeral" | "opening" | "etc";
+export type OccasionType = "wedding" | "funeral" | "opening" | "promotion" | "etc";
 
 // draft is included defensively — the exposed API only ever creates rows as
 // "submitted" (doc 02 §3-1), so draft should not appear in practice.
