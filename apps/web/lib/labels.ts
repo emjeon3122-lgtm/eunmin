@@ -1,9 +1,8 @@
 import type { OccasionType, RequestType, WreathStatus } from "./types";
 
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
-  self: "본인/가족",
-  colleague: "동료",
-  vendor_partner: "거래처",
+  self: "본인",
+  client: "고객사",
 };
 
 export const OCCASION_TYPE_LABELS: Record<OccasionType, string> = {

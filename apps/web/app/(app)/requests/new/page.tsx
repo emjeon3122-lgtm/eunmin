@@ -13,7 +13,7 @@ import { OCCASION_TYPE_LABELS, REQUEST_TYPE_LABELS } from "@/lib/labels";
 import type { Product, RibbonTemplate } from "@/lib/types";
 
 const schema = z.object({
-  requestType: z.enum(["self", "colleague", "vendor_partner"], {
+  requestType: z.enum(["self", "client"], {
     required_error: "신청 유형을 선택해주세요.",
   }),
   occasionType: z.enum(["wedding", "funeral", "opening", "etc"], {

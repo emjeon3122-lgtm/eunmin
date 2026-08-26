@@ -12,7 +12,7 @@ export interface User {
   role: UserRole;
 }
 
-export type RequestType = "self" | "colleague" | "vendor_partner";
+export type RequestType = "self" | "client";
 export type OccasionType = "wedding" | "funeral" | "opening" | "etc";
 
 // draft is included defensively — the exposed API only ever creates rows as

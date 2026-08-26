@@ -7,8 +7,7 @@ import { ExportQueryDto } from './dto/export-query.dto';
 
 const REQUEST_TYPE_LABEL: Record<string, string> = {
   self: '본인',
-  colleague: '동료',
-  vendor_partner: '거래처',
+  client: '고객사',
 };
 
 const STATUS_LABEL: Record<RequestStatus, string> = {

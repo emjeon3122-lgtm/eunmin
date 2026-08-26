@@ -14,8 +14,7 @@ enum Role {
 
 enum RequestType {
   self
-  colleague
-  vendor_partner
+  client
 }
 
 enum OccasionType {
