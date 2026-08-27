@@ -99,6 +99,7 @@ export default function AdminWreathRequestDetailPage() {
         <Row label="도착 희망" value={formatDateTime(request.desiredArrivalAt)} />
         <Row label="리본 문구" value={`${request.ribbonMessage} / ${request.ribbonSenderText}`} />
         <Row label="선언 금액" value={`${request.declaredAmount.toLocaleString("ko-KR")}원`} />
+        {request.costCode && <Row label="비용 코드" value={request.costCode} />}
         <Row label="사전승인" value={request.requiresPreApproval ? "필요" : "불필요"} />
         {request.requiresPreApproval && (
           <Row
@@ -121,7 +122,7 @@ export default function AdminWreathRequestDetailPage() {
       </dl>
 
       <section className="mt-6">
-        <h2 className="text-sm font-semibold text-gray-900">친구톡 발송 로그</h2>
+        <h2 className="text-sm font-semibold text-gray-900">알림톡 발송 로그</h2>
         <div className="mt-2 overflow-x-auto rounded-lg border border-gray-200 bg-white">
           <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="bg-gray-50 text-gray-500">

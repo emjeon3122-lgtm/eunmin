@@ -74,6 +74,7 @@ export default function WreathRequestDetailPage() {
         <Row label="배송 주소" value={request.deliveryAddress} />
         <Row label="도착 희망" value={formatDateTime(request.desiredArrivalAt)} />
         <Row label="리본 문구" value={`${request.ribbonMessage} / ${request.ribbonSenderText}`} />
+        {request.costCode && <Row label="비용 코드" value={request.costCode} />}
         {request.memo && <Row label="메모" value={request.memo} />}
       </dl>
 

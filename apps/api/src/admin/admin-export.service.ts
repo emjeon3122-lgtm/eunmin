@@ -40,8 +40,9 @@ export class AdminExportService {
       where,
       orderBy: { createdAt: 'asc' },
       include: {
-        requester: { select: { name: true, department: true } },
+        requester: { select: { name: true, department: true, employeeNo: true, email: true } },
         product: { select: { name: true, price: true } },
+        completionPhotos: { select: { fileUrl: true } },
       },
     });
 
@@ -53,15 +54,20 @@ export class AdminExportService {
     sheet.columns = [
       { header: '신청일', key: 'createdAt', width: 20 },
       { header: '신청자', key: 'requesterName', width: 12 },
+      { header: '사번', key: 'employeeNo', width: 12 },
       { header: '부서', key: 'department', width: 14 },
+      { header: '이메일', key: 'email', width: 22 },
       { header: '경조사 유형', key: 'occasionType', width: 12 },
       { header: '대상', key: 'requestType', width: 10 },
       { header: '수령인', key: 'recipientName', width: 12 },
       { header: '배송지', key: 'deliveryAddress', width: 32 },
       { header: '상품/금액', key: 'product', width: 24 },
+      { header: '리본 문구', key: 'ribbonMessage', width: 24 },
+      { header: '비용 코드', key: 'costCode', width: 14 },
       { header: '사전승인 여부', key: 'requiresPreApproval', width: 14 },
       { header: '상태', key: 'status', width: 12 },
       { header: '완료일', key: 'completedAt', width: 20 },
+      { header: '배송완료 사진 URL', key: 'completionPhotoUrls', width: 48 },
     ];
     sheet.getRow(1).font = { bold: true };
 
@@ -69,15 +75,20 @@ export class AdminExportService {
       sheet.addRow({
         createdAt: formatDate(r.createdAt),
         requesterName: r.requester.name,
+        employeeNo: r.requester.employeeNo,
         department: r.requester.department,
+        email: r.requester.email,
         occasionType: occasionLabel(r.occasionType),
         requestType: REQUEST_TYPE_LABEL[r.requestType] ?? r.requestType,
         recipientName: r.recipientName,
         deliveryAddress: r.deliveryAddress,
         product: r.product ? `${r.product.name} / ${r.product.price.toLocaleString('ko-KR')}원` : `${r.declaredAmount.toLocaleString('ko-KR')}원`,
+        ribbonMessage: `${r.ribbonMessage} / ${r.ribbonSenderText}`,
+        costCode: r.costCode ?? '',
         requiresPreApproval: r.requiresPreApproval ? 'Y' : 'N',
         status: STATUS_LABEL[r.status] ?? r.status,
         completedAt: r.completedAt ? formatDate(r.completedAt) : '',
+        completionPhotoUrls: r.completionPhotos.map((p) => p.fileUrl).join(', '),
       });
     }
 

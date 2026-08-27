@@ -48,11 +48,13 @@ async function main() {
     vendor = await prisma.vendor.create({
       data: {
         name: 'OO꽃집',
-        channelType: 'kakao_friendtalk',
+        channelType: 'kakao_alimtalk',
         contactPhone: '010-9876-5432',
         kakaoChannelId: 'mock-channel-id',
         isChannelFriendConfirmed: true,
-        fallbackChannel: 'manual_admin_alert',
+        // 알림톡은 대행사(Solapi)가 발송 실패 시 자동으로 SMS 대체발송을 해주므로
+        // 친구톡 때와 달리 관리자 수동 연락이 최후의 수단으로만 필요하다.
+        fallbackChannel: 'sms',
         isActive: true,
       },
     });

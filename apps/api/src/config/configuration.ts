@@ -18,6 +18,7 @@ export interface AppConfig {
     apiKey: string;
     senderKey: string;
     apiBaseUrl: string;
+    templateId: string;
     webhookSecret: string;
   };
   storageDriver: 'local';
@@ -44,6 +45,7 @@ export default (): { app: AppConfig } => ({
       apiKey: process.env.KAKAO_CPAAS_API_KEY ?? '',
       senderKey: process.env.KAKAO_CPAAS_SENDER_KEY ?? '',
       apiBaseUrl: process.env.KAKAO_CPAAS_API_BASE_URL ?? '',
+      templateId: process.env.KAKAO_CPAAS_TEMPLATE_ID ?? '',
       webhookSecret: process.env.KAKAO_WEBHOOK_SECRET ?? 'change-me',
     },
     storageDriver: (process.env.STORAGE_DRIVER as 'local') ?? 'local',

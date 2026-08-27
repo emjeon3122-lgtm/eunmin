@@ -126,6 +126,10 @@ model WreathRequest {
   ribbonMessage       String        @map("ribbon_message")
   ribbonSenderText    String        @map("ribbon_sender_text")
   declaredAmount      Int           @map("declared_amount")
+  // 정산용 비용 코드 — 사내 DB/엑셀 추출에만 쓰이는 내부 전용 필드. 꽃집에게 보내는
+  // 알림톡 payload(vendor-adapter.interface.ts VendorMessagePayload)에는 절대 포함하지
+  // 않는다 (신규 요구사항 3장: 꽃집 전송 데이터에서 내부 정보 노출 금지).
+  costCode            String?       @map("cost_code")
   memo                String?
 
   requiresPreApproval Boolean       @default(false) @map("requires_pre_approval")

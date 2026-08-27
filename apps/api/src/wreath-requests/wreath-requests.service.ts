@@ -66,6 +66,7 @@ export class WreathRequestsService {
         ribbonSenderText: dto.ribbonSenderText,
         declaredAmount: dto.declaredAmount,
         memo: dto.memo,
+        costCode: dto.costCode,
         requiresPreApproval: ruleCheck.requiresPreApproval,
         attachmentId: dto.attachmentId ?? null,
         status: 'submitted',
@@ -175,6 +176,7 @@ export class WreathRequestsService {
       ribbonSenderText: request.ribbonSenderText,
       declaredAmount: request.declaredAmount,
       memo: request.memo,
+      costCode: request.costCode,
       requiresPreApproval: request.requiresPreApproval,
       vendorTransmission: latestTransmission
         ? { status: latestTransmission.status, attemptedAt: latestTransmission.attemptedAt }

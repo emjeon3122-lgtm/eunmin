@@ -30,6 +30,7 @@ const schema = z.object({
   ribbonMessage: z.string().min(1, "리본 문구를 입력해주세요."),
   ribbonSenderText: z.string().min(1, "보내는 이를 입력해주세요."),
   memo: z.string().optional(),
+  costCode: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -115,6 +116,7 @@ export default function NewWreathRequestPage() {
         ribbonMessage: values.ribbonMessage,
         ribbonSenderText: values.ribbonSenderText,
         memo: values.memo || undefined,
+        costCode: values.costCode || undefined,
         attachmentId,
       });
       router.push(`/requests/${res.data.id}`);
@@ -229,6 +231,11 @@ export default function NewWreathRequestPage() {
             />
             <p className="mt-1 text-xs text-gray-400">상품 선택 시 자동으로 채워지며, 필요 시 직접 수정할 수 있습니다.</p>
             {errors.declaredAmount && <p className="mt-1 text-xs text-red-600">{errors.declaredAmount.message}</p>}
+          </div>
+          <div>
+            <label htmlFor="costCode">비용 코드 (선택)</label>
+            <input id="costCode" placeholder="정산 담당 부서 안내에 따라 입력" {...register("costCode")} className="w-full sm:w-48" />
+            <p className="mt-1 text-xs text-gray-400">사내 정산용으로만 쓰이며 꽃집에는 전달되지 않습니다.</p>
           </div>
 
           {requiresPreApproval && (

@@ -38,7 +38,7 @@ export class SendToVendorService {
     const transmission = await this.prisma.orderTransmission.create({
       data: {
         requestId,
-        channel: 'kakao_friendtalk',
+        channel: 'kakao_alimtalk',
         status: 'pending',
         payload: { statusLinkUrl },
       },
@@ -72,7 +72,7 @@ export class SendToVendorService {
       });
       await this.notificationsService.notifyAdmins(
         requestId,
-        `[긴급] ${vendor.name}에게 친구톡 발송 실패. 직접 전화·문자로 전달해주세요.`,
+        `[긴급] ${vendor.name}에게 알림톡 발송 실패. 직접 전화·문자로 전달해주세요.`,
       );
       // status는 submitted로 유지. 자동 재시도 정책은 docs/04 section 8-4 미확정 —
       // 현재는 관리자 수동 처리(/api/admin/wreath-requests/{id}/delivery-status)에 의존.

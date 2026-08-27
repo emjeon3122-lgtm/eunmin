@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppConfig } from '../config/configuration';
-import { KakaoFriendTalkAdapter } from './kakao-friendtalk.adapter';
+import { SolapiAlimtalkAdapter } from './solapi-alimtalk.adapter';
 import { MockVendorAdapter } from './mock-vendor.adapter';
 import { VENDOR_ADAPTER } from './vendor-adapter.interface';
 
@@ -11,17 +11,17 @@ import { VENDOR_ADAPTER } from './vendor-adapter.interface';
   imports: [ConfigModule],
   providers: [
     MockVendorAdapter,
-    KakaoFriendTalkAdapter,
+    SolapiAlimtalkAdapter,
     {
       provide: VENDOR_ADAPTER,
-      inject: [ConfigService, MockVendorAdapter, KakaoFriendTalkAdapter],
+      inject: [ConfigService, MockVendorAdapter, SolapiAlimtalkAdapter],
       useFactory: (
         config: ConfigService,
         mock: MockVendorAdapter,
-        kakao: KakaoFriendTalkAdapter,
+        solapi: SolapiAlimtalkAdapter,
       ) => {
         const mode = config.get<AppConfig['vendorAdapter']>('app.vendorAdapter');
-        return mode === 'kakao' ? kakao : mock;
+        return mode === 'kakao' ? solapi : mock;
       },
     },
   ],

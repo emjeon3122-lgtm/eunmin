@@ -62,6 +62,11 @@ export class CreateWreathRequestDto {
   @IsString()
   memo?: string;
 
+  // 정산용 비용 코드 — 내부 전용, 꽃집에게 전달되지 않는다 (WreathRequest.costCode 참고).
+  @IsOptional()
+  @IsString()
+  costCode?: string;
+
   @IsOptional()
   @IsUUID()
   attachmentId?: string | null;

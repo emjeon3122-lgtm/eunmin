@@ -54,6 +54,7 @@ export interface WreathRequestDetail {
   ribbonSenderText: string;
   declaredAmount: number;
   memo?: string | null;
+  costCode?: string | null;
   requiresPreApproval: boolean;
   vendorTransmission?: VendorTransmission | null;
   acceptedAt: string | null;

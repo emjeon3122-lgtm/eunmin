@@ -47,7 +47,7 @@ export class WebhooksService {
       });
       await this.notificationsService.notifyAdmins(
         transmission.requestId,
-        `친구톡 발송 실패(${body.reason ?? '사유 미상'}) — 수동 연락이 필요합니다.`,
+        `알림톡 발송 실패(${body.reason ?? '사유 미상'}) — 수동 연락이 필요합니다.`,
       );
     } else {
       await this.prisma.orderTransmission.update({
