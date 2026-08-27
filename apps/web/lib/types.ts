@@ -58,7 +58,7 @@ export interface WreathRequestDetail {
   vendorTransmission?: VendorTransmission | null;
   acceptedAt: string | null;
   completedAt: string | null;
-  completionPhotoUrl: string | null;
+  completionPhotoUrls: string[];
   cancelledReason: string | null;
   cancelledAt?: string | null;
   createdAt: string;

@@ -149,14 +149,15 @@ export class WreathRequestsService {
   // Shared shape builder for GET /api/wreath-requests/{id} (doc 02 section 3-4)
   // reused by the admin detail view too.
   async toDetail(request: { id: string; [key: string]: any }) {
-    const [latestTransmission, completionPhoto] = await Promise.all([
+    const [latestTransmission, completionPhotos] = await Promise.all([
       this.prisma.orderTransmission.findFirst({
         where: { requestId: request.id },
         orderBy: { attemptedAt: 'desc' },
       }),
-      request.completionPhotoId
-        ? this.prisma.attachment.findUnique({ where: { id: request.completionPhotoId } })
-        : Promise.resolve(null),
+      this.prisma.attachment.findMany({
+        where: { completionForId: request.id },
+        orderBy: { uploadedAt: 'asc' },
+      }),
     ]);
 
     return {
@@ -180,7 +181,7 @@ export class WreathRequestsService {
         : null,
       acceptedAt: request.acceptedAt,
       completedAt: request.completedAt,
-      completionPhotoUrl: completionPhoto?.fileUrl ?? null,
+      completionPhotoUrls: completionPhotos.map((p) => p.fileUrl),
       adminOverrideNote: request.adminOverrideNote,
       cancelledReason: request.cancelledReason,
       cancelledAt: request.cancelledAt,

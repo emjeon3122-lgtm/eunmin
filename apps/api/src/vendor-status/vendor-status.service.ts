@@ -45,30 +45,36 @@ export class VendorStatusService {
     return { status: updated.status, nextAction: 'complete' as NextAction };
   }
 
-  async complete(token: string, photo?: Express.Multer.File) {
+  async complete(token: string, photos: Express.Multer.File[]) {
     const request = await this.loadByToken(token);
     this.assertTransition(request.status, 'accepted', 'complete');
-    if (!photo) {
-      throw new InvalidStatusTransitionException('배송완료 사진을 첨부해주세요.');
+    if (photos.length === 0) {
+      throw new InvalidStatusTransitionException('배송완료 사진을 1장 이상 첨부해주세요.');
     }
 
-    const { fileUrl } = await this.storage.save(photo);
-    const attachment = await this.prisma.attachment.create({
-      data: {
-        fileName: photo.originalname,
-        fileUrl,
-        mimeType: photo.mimetype,
-        type: 'delivery_completion_photo',
-        uploaderType: 'vendor',
-      },
-    });
+    // 여러 장을 각각 별도 Attachment로 저장하고 모두 이 신청에 연결한다
+    // (docs/02 amendment: 배송완료 사진 여러 장 업로드 허용).
+    await Promise.all(
+      photos.map(async (photo) => {
+        const { fileUrl } = await this.storage.save(photo);
+        return this.prisma.attachment.create({
+          data: {
+            fileName: photo.originalname,
+            fileUrl,
+            mimeType: photo.mimetype,
+            type: 'delivery_completion_photo',
+            uploaderType: 'vendor',
+            completionForId: request.id,
+          },
+        });
+      }),
+    );
 
     const updated = await this.prisma.wreathRequest.update({
       where: { id: request.id },
       data: {
         status: 'completed',
         completedAt: new Date(),
-        completionPhotoId: attachment.id,
         vendorStatusToken: null, // 완료 즉시 토큰 만료 → 링크 재사용/재접근 방지
       },
     });

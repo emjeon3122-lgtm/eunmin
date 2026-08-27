@@ -1,6 +1,8 @@
-import { Controller, Get, Param, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Param, Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { VendorStatusService } from './vendor-status.service';
+
+const MAX_COMPLETION_PHOTOS = 5;
 
 // No JwtAuthGuard here by design — token IS the authentication (doc 02 section 3-5).
 @Controller('vendor-status')
@@ -18,8 +20,8 @@ export class VendorStatusController {
   }
 
   @Post(':token/complete')
-  @UseInterceptors(FileInterceptor('photo'))
-  complete(@Param('token') token: string, @UploadedFile() photo?: Express.Multer.File) {
-    return this.vendorStatusService.complete(token, photo);
+  @UseInterceptors(FilesInterceptor('photos', MAX_COMPLETION_PHOTOS))
+  complete(@Param('token') token: string, @UploadedFiles() photos?: Express.Multer.File[]) {
+    return this.vendorStatusService.complete(token, photos ?? []);
   }
 }

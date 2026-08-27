@@ -141,8 +141,7 @@ model WreathRequest {
 
   vendorStatusToken   String?       @unique @map("vendor_status_token")
   acceptedAt          DateTime?     @map("accepted_at")
-  completionPhotoId   String?       @unique @map("completion_photo_id")
-  completionPhoto     Attachment?   @relation("CompletionPhoto", fields: [completionPhotoId], references: [id])
+  completionPhotos    Attachment[]  @relation("CompletionPhotos")
   completedAt         DateTime?     @map("completed_at")
   adminOverrideNote   String?       @map("admin_override_note")
 
@@ -161,17 +160,21 @@ model WreathRequest {
 }
 
 model Attachment {
-  id           String         @id @default(uuid())
-  fileName     String         @map("file_name")
-  fileUrl      String         @map("file_url")
-  mimeType     String         @map("mime_type")
-  type         AttachmentType
-  uploaderType UploaderType   @map("uploader_type")
-  uploadedById String?        @map("uploaded_by")
-  uploadedAt   DateTime       @default(now()) @map("uploaded_at")
+  id                  String         @id @default(uuid())
+  fileName            String         @map("file_name")
+  fileUrl             String         @map("file_url")
+  mimeType             String         @map("mime_type")
+  type                AttachmentType
+  uploaderType        UploaderType   @map("uploader_type")
+  uploadedById        String?        @map("uploaded_by")
+  uploadedAt          DateTime       @default(now()) @map("uploaded_at")
+
+  // Completion photos are many-per-request (docs/02 upload-multiple-photos
+  // amendment); the pre-approval proof stays 1:1 via WreathRequest.attachmentId.
+  completionForId     String?        @map("completion_for_id")
+  completionFor       WreathRequest? @relation("CompletionPhotos", fields: [completionForId], references: [id])
 
   preApprovalFor WreathRequest? @relation("PreApprovalAttachment")
-  completionFor  WreathRequest? @relation("CompletionPhoto")
 
   @@map("attachments")
 }

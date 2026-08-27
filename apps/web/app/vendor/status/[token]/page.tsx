@@ -7,6 +7,8 @@ import { OCCASION_TYPE_LABELS } from "@/lib/labels";
 import { formatDateTime } from "@/lib/labels";
 import type { VendorStatusData } from "@/lib/types";
 
+const MAX_COMPLETION_PHOTOS = 5;
+
 export default function VendorStatusPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
@@ -16,7 +18,7 @@ export default function VendorStatusPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [completedNow, setCompletedNow] = useState(false);
 
   function load() {
@@ -65,12 +67,12 @@ export default function VendorStatusPage() {
   }
 
   async function handleComplete() {
-    if (!photo) return;
+    if (photos.length === 0) return;
     setSubmitting(true);
     setError(null);
     try {
       const formData = new FormData();
-      formData.append("photo", photo);
+      photos.forEach((p) => formData.append("photos", p));
       await apiPostForm(`/vendor-status/${token}/complete`, formData, { auth: false });
       setCompletedNow(true);
     } catch (err) {
@@ -135,19 +137,37 @@ export default function VendorStatusPage() {
 
           {!showAcceptedThanks && data.nextAction === "complete" && (
             <div className="space-y-3">
-              <p className="text-sm text-gray-600">배송완료 사진을 첨부하고 완료 버튼을 눌러주세요.</p>
+              <p className="text-sm text-gray-600">
+                배송완료 사진을 첨부하고(최대 {MAX_COMPLETION_PHOTOS}장) 완료 버튼을 눌러주세요.
+              </p>
               <input
                 type="file"
                 accept="image/*"
                 capture="environment"
-                onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+                multiple
+                onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, MAX_COMPLETION_PHOTOS))}
                 className="block w-full text-base file:mr-3 file:rounded-md file:border-0 file:bg-gray-200 file:px-3 file:py-3 file:text-base"
               />
-              {photo && <p className="text-sm text-green-700">선택됨: {photo.name}</p>}
+              {photos.length > 0 && (
+                <ul className="space-y-1 text-sm text-green-700">
+                  {photos.map((p, i) => (
+                    <li key={`${p.name}-${i}`} className="flex items-center justify-between gap-2">
+                      <span className="truncate">선택됨: {p.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="shrink-0 text-gray-400"
+                      >
+                        제거
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <button
                 type="button"
                 onClick={handleComplete}
-                disabled={submitting || !photo}
+                disabled={submitting || photos.length === 0}
                 className="w-full rounded-lg bg-brand-600 py-4 text-lg font-semibold text-white active:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {submitting ? "처리 중..." : "배송완료"}

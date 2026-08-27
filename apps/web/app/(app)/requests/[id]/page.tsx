@@ -13,7 +13,7 @@ export default function WreathRequestDetailPage() {
   const [request, setRequest] = useState<WreathRequestDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [openPhotoIndex, setOpenPhotoIndex] = useState<number | null>(null);
 
   function load() {
     apiGet<{ data: WreathRequestDetail }>(`/wreath-requests/${params.id}`)
@@ -97,44 +97,73 @@ export default function WreathRequestDetailPage() {
 
       {request.status === "completed" && (
         <div className="mt-4 rounded-lg border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-900">📷 배송완료 사진</h2>
-          {request.completionPhotoUrl ? (
-            <button
-              type="button"
-              onClick={() => setShowPhotoModal(true)}
-              className="mt-3 block w-full overflow-hidden rounded-md border border-gray-200"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={resolveFileUrl(request.completionPhotoUrl) ?? undefined}
-                alt="배송완료 사진"
-                className="max-h-64 w-full object-contain"
-              />
-              <span className="block bg-gray-50 py-1.5 text-center text-xs text-gray-500">
-                눌러서 크게 보기
-              </span>
-            </button>
+          <h2 className="text-sm font-semibold text-gray-900">
+            📷 배송완료 사진{request.completionPhotoUrls.length > 1 ? ` (${request.completionPhotoUrls.length}장)` : ""}
+          </h2>
+          {request.completionPhotoUrls.length > 0 ? (
+            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {request.completionPhotoUrls.map((url, i) => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => setOpenPhotoIndex(i)}
+                  className="aspect-square overflow-hidden rounded-md border border-gray-200"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={resolveFileUrl(url) ?? undefined}
+                    alt={`배송완료 사진 ${i + 1}`}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
           ) : (
             <p className="mt-2 text-sm text-gray-500">사진 없음 (관리자 수동 처리)</p>
           )}
         </div>
       )}
 
-      {showPhotoModal && request.completionPhotoUrl && (
+      {openPhotoIndex !== null && (
         <div
           className="fixed inset-0 z-10 flex items-center justify-center bg-black/70 px-4"
-          onClick={() => setShowPhotoModal(false)}
+          onClick={() => setOpenPhotoIndex(null)}
         >
           <div className="max-h-[90vh] max-w-2xl" onClick={(e) => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={resolveFileUrl(request.completionPhotoUrl) ?? undefined}
-              alt="배송완료 사진 크게 보기"
-              className="max-h-[85vh] w-full rounded-md object-contain"
+              src={resolveFileUrl(request.completionPhotoUrls[openPhotoIndex]) ?? undefined}
+              alt={`배송완료 사진 ${openPhotoIndex + 1} 크게 보기`}
+              className="max-h-[80vh] w-full rounded-md object-contain"
             />
+            {request.completionPhotoUrls.length > 1 && (
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenPhotoIndex(
+                      (openPhotoIndex - 1 + request.completionPhotoUrls.length) % request.completionPhotoUrls.length
+                    )
+                  }
+                  className="rounded-md bg-white/90 px-3 py-2 text-sm font-medium text-gray-800"
+                >
+                  &lt; 이전
+                </button>
+                <span className="text-sm text-white">
+                  {openPhotoIndex + 1} / {request.completionPhotoUrls.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpenPhotoIndex((openPhotoIndex + 1) % request.completionPhotoUrls.length)}
+                  className="rounded-md bg-white/90 px-3 py-2 text-sm font-medium text-gray-800"
+                >
+                  다음 &gt;
+                </button>
+              </div>
+            )}
             <button
               type="button"
-              onClick={() => setShowPhotoModal(false)}
+              onClick={() => setOpenPhotoIndex(null)}
               className="mt-3 w-full rounded-md bg-white/90 py-2 text-sm font-medium text-gray-800"
             >
               닫기
