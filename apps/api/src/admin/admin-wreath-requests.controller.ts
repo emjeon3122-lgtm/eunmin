@@ -4,6 +4,7 @@ import { AdminWreathRequestsService } from './admin-wreath-requests.service';
 import { ListAdminWreathRequestsQueryDto } from './dto/list-admin-wreath-requests.dto';
 import { AdminCancelDto } from './dto/admin-cancel.dto';
 import { DeliveryStatusDto } from './dto/delivery-status.dto';
+import { AttachPhotoDto } from './dto/attach-photo.dto';
 
 @Controller('admin/wreath-requests')
 @AdminGuard()
@@ -29,5 +30,10 @@ export class AdminWreathRequestsController {
   @Patch(':id/delivery-status')
   setDeliveryStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: DeliveryStatusDto) {
     return this.service.setDeliveryStatus(id, dto);
+  }
+
+  @Patch(':id/attach-photo')
+  attachPhoto(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AttachPhotoDto) {
+    return this.service.attachPhoto(id, dto.attachmentId);
   }
 }

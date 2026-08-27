@@ -104,6 +104,55 @@ export class AdminWreathRequestsService {
     };
   }
 
+  // GET /api/admin/unmatched-photos — photos that arrived via the 2순위 카톡
+  // 웹훅 경로 (webhooks.service.ts handleInboundPhoto) when 0 or 2+ "accepted"
+  // orders existed for that vendor at once, so the system refused to guess.
+  async listUnmatchedPhotos() {
+    return this.prisma.attachment.findMany({
+      where: { type: 'delivery_completion_photo', completionForId: null },
+      orderBy: { uploadedAt: 'desc' },
+      select: { id: true, fileName: true, fileUrl: true, uploadedAt: true },
+    });
+  }
+
+  // PATCH /api/admin/wreath-requests/{id}/attach-photo — admin manually resolves
+  // an unmatched photo (see listUnmatchedPhotos) onto the correct request.
+  async attachPhoto(id: string, attachmentId: string) {
+    const request = await this.prisma.wreathRequest.findUnique({ where: { id } });
+    if (!request) {
+      throw new NotFoundApiException('신청을 찾을 수 없습니다.');
+    }
+    if (request.status !== 'accepted' && request.status !== 'completed') {
+      throw new InvalidStatusTransitionException(
+        '접수 확인되었거나 이미 완료된 신청에만 사진을 연결할 수 있습니다.',
+      );
+    }
+
+    const attachment = await this.prisma.attachment.findUnique({ where: { id: attachmentId } });
+    if (!attachment || attachment.type !== 'delivery_completion_photo') {
+      throw new NotFoundApiException('사진을 찾을 수 없습니다.');
+    }
+    if (attachment.completionForId) {
+      throw new InvalidStatusTransitionException('이미 다른 신청에 연결된 사진입니다.');
+    }
+
+    await this.prisma.attachment.update({ where: { id: attachmentId }, data: { completionForId: id } });
+
+    if (request.status === 'accepted') {
+      const updated = await this.prisma.wreathRequest.update({
+        where: { id },
+        data: { status: 'completed', completedAt: new Date(), vendorStatusToken: null },
+      });
+      await this.notificationsService.notifyRequester(
+        updated.requesterId,
+        updated.id,
+        '화환 배송이 완료되었습니다.',
+      );
+      return { id: updated.id, status: updated.status, completedAt: updated.completedAt };
+    }
+    return { id: request.id, status: request.status, completedAt: request.completedAt };
+  }
+
   async cancel(id: string, reason: string) {
     const request = await this.prisma.wreathRequest.findUnique({ where: { id } });
     if (!request) {

@@ -8,6 +8,7 @@ import { AdminExportController } from './admin-export.controller';
 import { AdminExportService } from './admin-export.service';
 import { AdminVendorsController } from './admin-vendors.controller';
 import { AdminApprovalRulesController } from './admin-approval-rules.controller';
+import { AdminUnmatchedPhotosController } from './admin-unmatched-photos.controller';
 
 @Module({
   imports: [AuthModule, NotificationsModule, WreathRequestsModule],
@@ -16,6 +17,7 @@ import { AdminApprovalRulesController } from './admin-approval-rules.controller'
     AdminExportController,
     AdminVendorsController,
     AdminApprovalRulesController,
+    AdminUnmatchedPhotosController,
   ],
   providers: [AdminWreathRequestsService, AdminExportService],
 })
