@@ -13,6 +13,7 @@ export default function WreathRequestDetailPage() {
   const [request, setRequest] = useState<WreathRequestDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
 
   function load() {
     apiGet<{ data: WreathRequestDetail }>(`/wreath-requests/${params.id}`)
@@ -34,7 +35,7 @@ export default function WreathRequestDetailPage() {
       load();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        alert("이미 꽃집에 전달되어 취소할 수 없습니다. 총무팀에 문의해주세요.");
+        alert("이미 꽃집이 접수하여 취소할 수 없습니다. 총무팀에 문의해주세요.");
       } else {
         alert(err instanceof ApiError ? err.message : "취소 처리 중 오류가 발생했습니다.");
       }
@@ -76,7 +77,7 @@ export default function WreathRequestDetailPage() {
         {request.memo && <Row label="메모" value={request.memo} />}
       </dl>
 
-      {request.status === "submitted" && (
+      {(request.status === "submitted" || request.status === "submitted_to_vendor") && (
         <div className="mt-4">
           <button
             onClick={handleCancel}
@@ -85,11 +86,12 @@ export default function WreathRequestDetailPage() {
           >
             {cancelling ? "취소 처리 중..." : "신청 취소"}
           </button>
+          <p className="mt-1 text-xs text-gray-400">꽃집이 접수를 확인하기 전까지 취소할 수 있습니다.</p>
         </div>
       )}
-      {request.status === "submitted_to_vendor" && (
+      {request.status === "accepted" && (
         <p className="mt-4 text-sm text-gray-500">
-          이미 꽃집에 전달되어 취소할 수 없습니다. 변경이 필요하면 총무팀에 문의해주세요.
+          이미 꽃집이 접수하여 취소할 수 없습니다. 변경이 필요하면 총무팀에 문의해주세요.
         </p>
       )}
 
@@ -97,15 +99,47 @@ export default function WreathRequestDetailPage() {
         <div className="mt-4 rounded-lg border border-gray-200 bg-white p-5">
           <h2 className="text-sm font-semibold text-gray-900">📷 배송완료 사진</h2>
           {request.completionPhotoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={resolveFileUrl(request.completionPhotoUrl) ?? undefined}
-              alt="배송완료 사진"
-              className="mt-3 max-h-96 w-full rounded-md object-contain"
-            />
+            <button
+              type="button"
+              onClick={() => setShowPhotoModal(true)}
+              className="mt-3 block w-full overflow-hidden rounded-md border border-gray-200"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolveFileUrl(request.completionPhotoUrl) ?? undefined}
+                alt="배송완료 사진"
+                className="max-h-64 w-full object-contain"
+              />
+              <span className="block bg-gray-50 py-1.5 text-center text-xs text-gray-500">
+                눌러서 크게 보기
+              </span>
+            </button>
           ) : (
             <p className="mt-2 text-sm text-gray-500">사진 없음 (관리자 수동 처리)</p>
           )}
+        </div>
+      )}
+
+      {showPhotoModal && request.completionPhotoUrl && (
+        <div
+          className="fixed inset-0 z-10 flex items-center justify-center bg-black/70 px-4"
+          onClick={() => setShowPhotoModal(false)}
+        >
+          <div className="max-h-[90vh] max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={resolveFileUrl(request.completionPhotoUrl) ?? undefined}
+              alt="배송완료 사진 크게 보기"
+              className="max-h-[85vh] w-full rounded-md object-contain"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPhotoModal(false)}
+              className="mt-3 w-full rounded-md bg-white/90 py-2 text-sm font-medium text-gray-800"
+            >
+              닫기
+            </button>
+          </div>
         </div>
       )}
     </div>

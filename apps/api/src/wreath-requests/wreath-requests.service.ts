@@ -132,9 +132,11 @@ export class WreathRequestsService {
     if (!request || request.requesterId !== requesterId) {
       throw new NotFoundApiException('신청을 찾을 수 없습니다.');
     }
-    if (request.status !== 'submitted') {
+    // 신청자 자진 취소는 꽃집이 "접수 확인"을 누르기 전까지(submitted/submitted_to_vendor)
+    // 계속 허용한다 — 메시지가 이미 전송됐어도 꽃집이 아직 확인 전이면 취소 가능.
+    if (request.status === 'accepted' || request.status === 'completed' || request.status === 'cancelled') {
       throw new InvalidStatusTransitionException(
-        '이미 꽃집에 전달된 신청은 직접 취소할 수 없습니다. 관리자에게 문의해주세요.',
+        '이미 꽃집이 접수한 신청은 직접 취소할 수 없습니다. 관리자에게 문의해주세요.',
       );
     }
     const updated = await this.prisma.wreathRequest.update({
