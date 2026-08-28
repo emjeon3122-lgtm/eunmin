@@ -151,12 +151,3 @@ export interface Paginated<T> {
   data: T[];
   meta: { total: number; page: number; size: number };
 }
-
-// 2순위 카톡 사진 매칭 경로가 자동으로 연결하지 못해 남겨둔 사진 —
-// GET /api/admin/unmatched-photos.
-export interface UnmatchedPhoto {
-  id: string;
-  fileName: string;
-  fileUrl: string;
-  uploadedAt: string;
-}

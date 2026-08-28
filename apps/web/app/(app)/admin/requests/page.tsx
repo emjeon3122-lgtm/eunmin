@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiDownload, apiGet, ApiError } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
-import { UnmatchedPhotosPanel } from "@/components/UnmatchedPhotosPanel";
 import { occasionWithRequestType } from "@/lib/labels";
 import type { AdminWreathRequestListItem, Paginated, WreathStatus } from "@/lib/types";
 
@@ -74,8 +73,6 @@ export default function AdminRequestsPage() {
           {exporting ? "다운로드 중..." : "⬇ 엑셀 다운로드"}
         </button>
       </div>
-
-      <UnmatchedPhotosPanel onLinked={load} />
 
       <form
         onSubmit={(e) => {
