@@ -38,7 +38,11 @@ const schema = z
       required_error: "경조사 유형을 선택해주세요.",
     }),
     orchidType: z.enum(["oriental", "western"]).optional(),
-    weddingSide: z.enum(["groom", "bride"]).optional(),
+    // register()로 연결한 라디오 그룹은 아무것도 체크되지 않으면 react-hook-form이
+    // undefined가 아닌 null을 값으로 넘긴다. optional()은 undefined만 허용하므로
+    // nullish()로 바꿔 기본 스키마 단계에서 실패하지 않게 하고, 실제 필수 여부
+    // 판단은 아래 superRefine에 맡긴다.
+    weddingSide: z.enum(["groom", "bride"]).nullish(),
 
     clientName: z.string().optional(),
     contractType: z
