@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiGet, apiPost, ApiError, resolveFileUrl } from "@/lib/api";
 import { StatusTracker } from "@/components/StatusTracker";
-import { occasionWithRequestType, formatDateTime } from "@/lib/labels";
+import {
+  occasionWithRequestType,
+  formatDateTime,
+  CONTRACT_TYPE_LABELS,
+  ORCHID_TYPE_LABELS,
+  WEDDING_SIDE_LABELS,
+} from "@/lib/labels";
 import type { WreathRequestDetail } from "@/lib/types";
 
 export default function WreathRequestDetailPage() {
@@ -68,14 +74,26 @@ export default function WreathRequestDetailPage() {
       </div>
 
       <dl className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white text-sm">
-        <Row label="경조사 유형" value={occasionWithRequestType(request.occasionType, request.requestType)} />
+        <Row
+          label="경조사 유형"
+          value={
+            occasionWithRequestType(request.occasionType, request.requestType) +
+            (request.orchidType ? ` / ${ORCHID_TYPE_LABELS[request.orchidType]}` : "") +
+            (request.weddingSide ? ` / ${WEDDING_SIDE_LABELS[request.weddingSide]}` : "")
+          }
+        />
         <Row label="수령인" value={`${request.recipientName} / ${request.recipientPhone}`} />
         <Row label="장소" value={`${request.venueName}${request.deliveryDetail ? ` ${request.deliveryDetail}` : ""}`} />
         <Row label="배송 주소" value={request.deliveryAddress} />
         <Row label="도착 희망" value={formatDateTime(request.desiredArrivalAt)} />
         <Row label="리본 문구" value={`${request.ribbonMessage} / ${request.ribbonSenderText}`} />
+        <Row label="주문자 연락처" value={request.ordererPhone} />
+        {request.clientName && <Row label="고객사명" value={request.clientName} />}
+        {request.contractType && <Row label="계약구분" value={CONTRACT_TYPE_LABELS[request.contractType]} />}
+        {request.serviceName && <Row label="용역명" value={request.serviceName} />}
+        {request.sendReason && <Row label="발송 사유" value={request.sendReason} />}
         {request.costCode && <Row label="비용 코드" value={request.costCode} />}
-        {request.memo && <Row label="메모" value={request.memo} />}
+        {request.memo && <Row label="기타요청사항" value={request.memo} />}
       </dl>
 
       {(request.status === "submitted" || request.status === "submitted_to_vendor") && (

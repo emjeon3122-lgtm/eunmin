@@ -10,10 +10,20 @@ export interface User {
   email: string;
   phone: string;
   role: UserRole;
+  isPartner: boolean;
 }
 
-export type RequestType = "self" | "client";
+export type RequestType = "self" | "existing_client" | "prospective_client";
 export type OccasionType = "wedding" | "funeral" | "opening" | "promotion" | "etc";
+export type WeddingSide = "groom" | "bride";
+export type OrchidType = "oriental" | "western";
+export type ContractType =
+  | "external_audit"
+  | "voluntary_audit"
+  | "tax"
+  | "bookkeeping"
+  | "internal_accounting"
+  | "other_advisory";
 
 // draft is included defensively — the exposed API only ever creates rows as
 // "submitted" (doc 02 §3-1), so draft should not appear in practice.
@@ -44,8 +54,11 @@ export interface WreathRequestDetail {
   status: WreathStatus;
   requestType: RequestType;
   occasionType: OccasionType;
+  weddingSide?: WeddingSide | null;
+  orchidType?: OrchidType | null;
   recipientName: string;
   recipientPhone: string;
+  ordererPhone: string;
   venueName: string;
   deliveryAddress: string;
   deliveryDetail?: string | null;
@@ -54,6 +67,10 @@ export interface WreathRequestDetail {
   ribbonSenderText: string;
   declaredAmount: number;
   memo?: string | null;
+  clientName?: string | null;
+  contractType?: ContractType | null;
+  serviceName?: string | null;
+  sendReason?: string | null;
   costCode?: string | null;
   requiresPreApproval: boolean;
   vendorTransmission?: VendorTransmission | null;
@@ -150,4 +167,13 @@ export interface VendorStatusData {
 export interface Paginated<T> {
   data: T[];
   meta: { total: number; page: number; size: number };
+}
+
+// POST /api/invitation-parser/parse — 실제 OCR/URL 파싱 서비스 미정이라 지금은
+// 항상 빈 값을 반환하는 Mock 어댑터가 응답한다 (apps/api/src/invitation-parser).
+export interface ParsedInvitationFields {
+  recipientName?: string;
+  venueName?: string;
+  deliveryAddress?: string;
+  desiredArrivalAt?: string;
 }

@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiGet, apiPatch, apiPost, ApiError, resolveFileUrl } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
-import { occasionWithRequestType, formatDateTime } from "@/lib/labels";
+import {
+  occasionWithRequestType,
+  formatDateTime,
+  CONTRACT_TYPE_LABELS,
+  ORCHID_TYPE_LABELS,
+  WEDDING_SIDE_LABELS,
+} from "@/lib/labels";
 import type { AdminWreathRequestDetail } from "@/lib/types";
 
 export default function AdminWreathRequestDetailPage() {
@@ -92,15 +98,27 @@ export default function AdminWreathRequestDetailPage() {
 
       <dl className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white text-sm">
         <Row label="신청자" value={`${request.requesterName} (${request.department})`} />
-        <Row label="경조사 유형" value={occasionWithRequestType(request.occasionType, request.requestType)} />
+        <Row
+          label="경조사 유형"
+          value={
+            occasionWithRequestType(request.occasionType, request.requestType) +
+            (request.orchidType ? ` / ${ORCHID_TYPE_LABELS[request.orchidType]}` : "") +
+            (request.weddingSide ? ` / ${WEDDING_SIDE_LABELS[request.weddingSide]}` : "")
+          }
+        />
         <Row label="수령인" value={`${request.recipientName} / ${request.recipientPhone}`} />
+        <Row label="주문자 연락처" value={request.ordererPhone} />
         <Row label="장소" value={`${request.venueName}${request.deliveryDetail ? ` ${request.deliveryDetail}` : ""}`} />
         <Row label="배송 주소" value={request.deliveryAddress} />
         <Row label="도착 희망" value={formatDateTime(request.desiredArrivalAt)} />
         <Row label="리본 문구" value={`${request.ribbonMessage} / ${request.ribbonSenderText}`} />
         <Row label="선언 금액" value={`${request.declaredAmount.toLocaleString("ko-KR")}원`} />
+        {request.clientName && <Row label="고객사명" value={request.clientName} />}
+        {request.contractType && <Row label="계약구분" value={CONTRACT_TYPE_LABELS[request.contractType]} />}
+        {request.serviceName && <Row label="용역명" value={request.serviceName} />}
+        {request.sendReason && <Row label="발송 사유" value={request.sendReason} />}
         {request.costCode && <Row label="비용 코드" value={request.costCode} />}
-        <Row label="사전승인" value={request.requiresPreApproval ? "필요" : "불필요"} />
+        <Row label="파트너 승인" value={request.requiresPreApproval ? "증빙 필요(비파트너)" : "불필요(파트너)"} />
         {request.requiresPreApproval && (
           <Row
             label="증빙 파일"

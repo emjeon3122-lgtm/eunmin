@@ -13,4 +13,5 @@ export interface AuthenticatedUser {
   department: string;
   email: string;
   role: Role;
+  isPartner: boolean;
 }

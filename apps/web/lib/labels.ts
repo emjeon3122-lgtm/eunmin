@@ -1,8 +1,9 @@
-import type { OccasionType, RequestType, WreathStatus } from "./types";
+import type { ContractType, OccasionType, OrchidType, RequestType, WeddingSide, WreathStatus } from "./types";
 
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
-  self: "본인",
-  client: "고객사",
+  self: "임직원(본인)",
+  existing_client: "고객사(현재 고객)",
+  prospective_client: "고객사(잠재 고객)",
 };
 
 export const OCCASION_TYPE_LABELS: Record<OccasionType, string> = {
@@ -11,6 +12,25 @@ export const OCCASION_TYPE_LABELS: Record<OccasionType, string> = {
   opening: "개업",
   promotion: "승진",
   etc: "기타",
+};
+
+export const WEDDING_SIDE_LABELS: Record<WeddingSide, string> = {
+  groom: "신랑측",
+  bride: "신부측",
+};
+
+export const ORCHID_TYPE_LABELS: Record<OrchidType, string> = {
+  oriental: "동양란",
+  western: "서양란",
+};
+
+export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
+  external_audit: "외부감사/공익법인감사",
+  voluntary_audit: "임의감사",
+  tax: "세무",
+  bookkeeping: "기장",
+  internal_accounting: "내부회계",
+  other_advisory: "기타 자문",
 };
 
 export function occasionWithRequestType(occasion: OccasionType, requestType: RequestType) {

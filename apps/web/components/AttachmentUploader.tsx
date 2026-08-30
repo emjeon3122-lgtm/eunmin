@@ -9,8 +9,10 @@ interface AttachmentUploadResponse {
 
 export function AttachmentUploader({
   onUploaded,
+  label = "⚠ 파트너 승인이 필요한 신청입니다. 파트너 승인 증빙을 첨부해주세요.",
 }: {
   onUploaded: (attachmentId: string, fileName: string) => void;
+  label?: string;
 }) {
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -37,16 +39,15 @@ export function AttachmentUploader({
 
   return (
     <div className="rounded-md border border-amber-300 bg-amber-50 p-4">
-      <p className="text-sm font-medium text-amber-800">
-        ⚠ 본부장 사전승인이 필요한 신청입니다. 승인 증빙을 첨부해주세요.
-      </p>
+      <p className="text-sm font-medium text-amber-800">{label}</p>
       <input
         type="file"
-        accept=".pdf,.jpg,.jpeg,.png"
+        accept=".pdf,.jpg,.jpeg,.png,.webp"
         onChange={handleChange}
         disabled={uploading}
         className="mt-2 block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-amber-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-amber-700"
       />
+      <p className="mt-1 text-xs text-amber-700">JPG, JPEG, PNG, PDF, WEBP / 최대 10MB</p>
       {uploading && <p className="mt-1 text-sm text-amber-700">업로드 중...</p>}
       {fileName && !uploading && (
         <p className="mt-1 text-sm text-green-700">첨부됨: {fileName} ✓</p>
