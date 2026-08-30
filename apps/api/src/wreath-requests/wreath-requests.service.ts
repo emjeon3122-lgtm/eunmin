@@ -1,14 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { ApprovalRulesService } from '../approval-rules/approval-rules.service';
 import { SendToVendorService } from '../jobs/send-to-vendor.service';
 import {
   InvalidStatusTransitionException,
   NotFoundApiException,
   PreApprovalAttachmentRequiredException,
 } from '../common/exceptions/api.exception';
-import { formatKrw, occasionLabel } from '../common/occasion-label';
 import { CreateWreathRequestDto } from './dto/create-wreath-request.dto';
 
 // docs/04-backend-integration.md section 3 — 추측 불가능한 43자 URL-safe 토큰.
@@ -22,18 +20,20 @@ export class WreathRequestsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly approvalRulesService: ApprovalRulesService,
     private readonly sendToVendorService: SendToVendorService,
   ) {}
 
   // docs/02-api-spec.md section 3-1 + docs/04 section 3.
+  // 사전승인 게이팅 기준: 신청자(requester)의 파트너 여부(User.isPartner).
+  // 기존 금액 기준 approval_rules 엔진은 더 이상 이 흐름에서 쓰지 않는다 —
+  // 관리자 화면/테이블 자체는 남겨뒀지만 제출 시 참조하지 않는다.
   async create(dto: CreateWreathRequestDto, requesterId: string) {
-    const ruleCheck = await this.approvalRulesService.check(dto.occasionType, dto.declaredAmount);
+    const requester = await this.prisma.user.findUniqueOrThrow({ where: { id: requesterId } });
+    const requiresPreApproval = !requester.isPartner;
 
-    if (ruleCheck.requiresPreApproval && !dto.attachmentId) {
-      const rule = ruleCheck.matchedRule!;
+    if (requiresPreApproval && !dto.attachmentId) {
       throw new PreApprovalAttachmentRequiredException(
-        `${occasionLabel(dto.occasionType)}(${formatKrw(rule.minAmount)}원 이상) 유형은 본부장 사전승인 증빙 첨부가 필요합니다.`,
+        '파트너 승인 증빙을 첨부해 주세요.',
       );
     }
 
@@ -56,8 +56,11 @@ export class WreathRequestsService {
         requesterId,
         requestType: dto.requestType,
         occasionType: dto.occasionType,
+        weddingSide: dto.weddingSide,
+        orchidType: dto.orchidType,
         recipientName: dto.recipientName,
         recipientPhone: dto.recipientPhone,
+        ordererPhone: dto.ordererPhone,
         venueName: dto.venueName,
         deliveryAddress: dto.deliveryAddress,
         deliveryDetail: dto.deliveryDetail,
@@ -66,8 +69,12 @@ export class WreathRequestsService {
         ribbonSenderText: dto.ribbonSenderText,
         declaredAmount: dto.declaredAmount,
         memo: dto.memo,
+        clientName: dto.clientName,
+        contractType: dto.contractType,
+        serviceName: dto.serviceName,
+        sendReason: dto.sendReason,
         costCode: dto.costCode,
-        requiresPreApproval: ruleCheck.requiresPreApproval,
+        requiresPreApproval,
         attachmentId: dto.attachmentId ?? null,
         status: 'submitted',
         vendorId,
@@ -165,9 +172,12 @@ export class WreathRequestsService {
       id: request.id,
       status: request.status,
       occasionType: request.occasionType,
+      weddingSide: request.weddingSide,
+      orchidType: request.orchidType,
       requestType: request.requestType,
       recipientName: request.recipientName,
       recipientPhone: request.recipientPhone,
+      ordererPhone: request.ordererPhone,
       venueName: request.venueName,
       deliveryAddress: request.deliveryAddress,
       deliveryDetail: request.deliveryDetail,
@@ -176,6 +186,10 @@ export class WreathRequestsService {
       ribbonSenderText: request.ribbonSenderText,
       declaredAmount: request.declaredAmount,
       memo: request.memo,
+      clientName: request.clientName,
+      contractType: request.contractType,
+      serviceName: request.serviceName,
+      sendReason: request.sendReason,
       costCode: request.costCode,
       requiresPreApproval: request.requiresPreApproval,
       vendorTransmission: latestTransmission

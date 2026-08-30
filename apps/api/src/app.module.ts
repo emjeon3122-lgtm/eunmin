@@ -18,6 +18,7 @@ import { WreathRequestsModule } from './wreath-requests/wreath-requests.module';
 import { VendorStatusModule } from './vendor-status/vendor-status.module';
 import { AdminModule } from './admin/admin.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { InvitationParserModule } from './invitation-parser/invitation-parser.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     VendorStatusModule,
     AdminModule,
     WebhooksModule,
+    InvitationParserModule,
   ],
 })
 export class AppModule {}

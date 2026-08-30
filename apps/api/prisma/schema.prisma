@@ -14,7 +14,27 @@ enum Role {
 
 enum RequestType {
   self
-  client
+  existing_client
+  prospective_client
+}
+
+enum WeddingSide {
+  groom
+  bride
+}
+
+enum OrchidType {
+  oriental
+  western
+}
+
+enum ContractType {
+  external_audit
+  voluntary_audit
+  tax
+  bookkeeping
+  internal_accounting
+  other_advisory
 }
 
 enum OccasionType {
@@ -101,6 +121,9 @@ model User {
   phone        String?
   ssoSubjectId String   @unique @map("sso_subject_id")
   role         Role     @default(employee)
+  // 파트너(고위 직급) 여부 — false면 신청 시 파트너 승인 증빙 첨부가 필수다
+  // (기존 금액 기준 사전승인 규칙을 대체하는 새 게이팅 기준).
+  isPartner    Boolean  @default(false) @map("is_partner")
   createdAt    DateTime @default(now()) @map("created_at")
 
   wreathRequests     WreathRequest[] @relation("Requester")
@@ -117,8 +140,11 @@ model WreathRequest {
 
   requestType         RequestType   @map("request_type")
   occasionType        OccasionType  @map("occasion_type")
+  weddingSide         WeddingSide?  @map("wedding_side") // occasionType=wedding일 때만 사용
+  orchidType          OrchidType?   @map("orchid_type")  // occasionType=opening/promotion일 때만 사용
   recipientName       String        @map("recipient_name")
   recipientPhone      String        @map("recipient_phone")
+  ordererPhone        String        @map("orderer_phone") // 신청자 본인 휴대폰(수령인 연락처와 별개)
   venueName           String        @map("venue_name")
   deliveryAddress     String        @map("delivery_address")
   deliveryDetail      String?       @map("delivery_detail")
@@ -126,12 +152,23 @@ model WreathRequest {
   ribbonMessage       String        @map("ribbon_message")
   ribbonSenderText    String        @map("ribbon_sender_text")
   declaredAmount      Int           @map("declared_amount")
+
+  // Section 3 비용코드/발송사유 — requestType별로 쓰이는 필드가 다르다.
+  // existing_client(Case A): clientName/contractType/serviceName
+  // prospective_client(Case B) · self(Case C): sendReason + costCode
+  clientName          String?       @map("client_name")
+  contractType        ContractType? @map("contract_type")
+  serviceName         String?       @map("service_name")
+  sendReason          String?       @map("send_reason")
   // 정산용 비용 코드 — 사내 DB/엑셀 추출에만 쓰이는 내부 전용 필드. 꽃집에게 보내는
   // 알림톡 payload(vendor-adapter.interface.ts VendorMessagePayload)에는 절대 포함하지
   // 않는다 (신규 요구사항 3장: 꽃집 전송 데이터에서 내부 정보 노출 금지).
   costCode            String?       @map("cost_code")
   memo                String?
 
+  // 파트너 승인 증빙 게이팅 — User.isPartner가 false인 신청자만 필요하다
+  // (기존 금액 기준 approval_rules 게이트를 대체; 그 테이블/관리 화면 자체는
+  // 남겨뒀지만 제출 시 더 이상 참조하지 않는다).
   requiresPreApproval Boolean       @default(false) @map("requires_pre_approval")
   attachmentId        String?       @unique @map("attachment_id")
   attachment          Attachment?   @relation("PreApprovalAttachment", fields: [attachmentId], references: [id])

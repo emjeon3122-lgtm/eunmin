@@ -7,7 +7,17 @@ import { ExportQueryDto } from './dto/export-query.dto';
 
 const REQUEST_TYPE_LABEL: Record<string, string> = {
   self: '본인',
-  client: '고객사',
+  existing_client: '고객사(현재 고객)',
+  prospective_client: '고객사(잠재 고객)',
+};
+
+const CONTRACT_TYPE_LABEL: Record<string, string> = {
+  external_audit: '외부감사/공익법인감사',
+  voluntary_audit: '임의감사',
+  tax: '세무',
+  bookkeeping: '기장',
+  internal_accounting: '내부회계',
+  other_advisory: '기타 자문',
 };
 
 const STATUS_LABEL: Record<RequestStatus, string> = {
@@ -60,9 +70,14 @@ export class AdminExportService {
       { header: '경조사 유형', key: 'occasionType', width: 12 },
       { header: '대상', key: 'requestType', width: 10 },
       { header: '수령인', key: 'recipientName', width: 12 },
+      { header: '주문자 연락처', key: 'ordererPhone', width: 16 },
       { header: '배송지', key: 'deliveryAddress', width: 32 },
       { header: '상품/금액', key: 'product', width: 24 },
       { header: '리본 문구', key: 'ribbonMessage', width: 24 },
+      { header: '고객사명', key: 'clientName', width: 16 },
+      { header: '계약구분', key: 'contractType', width: 18 },
+      { header: '용역명', key: 'serviceName', width: 20 },
+      { header: '발송 사유', key: 'sendReason', width: 28 },
       { header: '비용 코드', key: 'costCode', width: 14 },
       { header: '사전승인 여부', key: 'requiresPreApproval', width: 14 },
       { header: '상태', key: 'status', width: 12 },
@@ -81,9 +96,14 @@ export class AdminExportService {
         occasionType: occasionLabel(r.occasionType),
         requestType: REQUEST_TYPE_LABEL[r.requestType] ?? r.requestType,
         recipientName: r.recipientName,
+        ordererPhone: r.ordererPhone,
         deliveryAddress: r.deliveryAddress,
         product: r.product ? `${r.product.name} / ${r.product.price.toLocaleString('ko-KR')}원` : `${r.declaredAmount.toLocaleString('ko-KR')}원`,
         ribbonMessage: `${r.ribbonMessage} / ${r.ribbonSenderText}`,
+        clientName: r.clientName ?? '',
+        contractType: r.contractType ? CONTRACT_TYPE_LABEL[r.contractType] ?? r.contractType : '',
+        serviceName: r.serviceName ?? '',
+        sendReason: r.sendReason ?? '',
         costCode: r.costCode ?? '',
         requiresPreApproval: r.requiresPreApproval ? 'Y' : 'N',
         status: STATUS_LABEL[r.status] ?? r.status,
