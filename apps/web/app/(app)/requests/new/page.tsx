@@ -105,6 +105,7 @@ export default function NewWreathRequestPage() {
     watch,
     setValue,
     trigger,
+    setError,
     reset,
     getValues,
     formState: { errors, isSubmitting },
@@ -179,7 +180,50 @@ export default function NewWreathRequestPage() {
   async function goNext() {
     const fields = STEP_FIELDS[step];
     const valid = fields ? await trigger(fields) : true;
-    if (valid) setStep((s) => s + 1);
+    if (!valid) return;
+
+    // superRefine의 조건부 필수값은 trigger()만으로는 안정적으로 걸러지지 않아
+    // 단계별로 한번 더 명시적으로 확인한다.
+    const v = getValues();
+    if (step === 2) {
+      if ((v.occasionType === "opening" || v.occasionType === "promotion") && !v.orchidType) {
+        setError("orchidType", { message: "동양란/서양란을 선택해주세요." });
+        return;
+      }
+    }
+    if (step === 3) {
+      if (v.requestType === "existing_client") {
+        if (!v.clientName) {
+          setError("clientName", { message: "고객사명을 입력해주세요." });
+          return;
+        }
+        if (!v.contractType) {
+          setError("contractType", { message: "계약구분을 선택해주세요." });
+          return;
+        }
+        if (!v.serviceName) {
+          setError("serviceName", { message: "용역명을 입력해주세요." });
+          return;
+        }
+      } else {
+        if (!v.sendReason) {
+          setError("sendReason", { message: "발송 사유를 입력해주세요." });
+          return;
+        }
+        if (!v.costCode) {
+          setError("costCode", { message: "비용 코드를 입력해주세요." });
+          return;
+        }
+      }
+    }
+    if (step === 4) {
+      if (v.occasionType === "wedding" && !v.weddingSide) {
+        setError("weddingSide", { message: "신랑측/신부측을 선택해주세요." });
+        return;
+      }
+    }
+
+    setStep((s) => s + 1);
   }
 
   function goBack() {
