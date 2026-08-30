@@ -21,7 +21,6 @@ export class VendorStatusService {
     const request = await this.loadByToken(token);
     return {
       occasionType: request.occasionType,
-      venueName: request.venueName,
       desiredArrivalAt: request.desiredArrivalAt,
       ribbonMessage: request.ribbonMessage,
       status: request.status,

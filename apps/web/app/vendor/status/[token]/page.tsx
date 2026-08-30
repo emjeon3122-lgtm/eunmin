@@ -110,7 +110,6 @@ export default function VendorStatusPage() {
         </h1>
 
         <dl className="mt-5 space-y-3 text-base">
-          <InfoRow label="장소" value={data.venueName} />
           <InfoRow label="도착 희망" value={formatDateTime(data.desiredArrivalAt)} />
           <InfoRow label="리본 문구" value={data.ribbonMessage} />
         </dl>

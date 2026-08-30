@@ -43,10 +43,6 @@ export class CreateWreathRequestDto {
 
   @IsString()
   @MinLength(1)
-  venueName: string;
-
-  @IsString()
-  @MinLength(1)
   deliveryAddress: string;
 
   @IsOptional()

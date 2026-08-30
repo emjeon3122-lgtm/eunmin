@@ -49,7 +49,6 @@ export class SendToVendorService {
         requestId,
         recipientPhone: vendor.contactPhone,
         occasionType: request.occasionType,
-        venueName: request.venueName,
         deliveryAddress: request.deliveryAddress,
         desiredArrivalAt: request.desiredArrivalAt.toISOString(),
         ribbonMessage: request.ribbonMessage,

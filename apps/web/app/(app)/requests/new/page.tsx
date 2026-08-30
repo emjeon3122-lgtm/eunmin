@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -54,7 +55,6 @@ const schema = z
 
     recipientName: z.string().min(1, "수령인 이름을 입력해주세요."),
     recipientPhone: z.string().min(9, "연락처를 입력해주세요. (예: 010-1234-5678)"),
-    venueName: z.string().min(1, "장소명을 입력해주세요."),
     deliveryAddress: z.string().min(1, "배송 주소를 입력해주세요."),
     deliveryDetail: z.string().min(1, "상세 주소를 입력해주세요."),
     desiredArrivalAt: z.string().min(1, "도착 희망 일시를 선택해주세요."),
@@ -88,7 +88,6 @@ const STEP_FIELDS: Record<number, (keyof FormValues)[]> = {
   4: [
     "recipientName",
     "recipientPhone",
-    "venueName",
     "deliveryAddress",
     "deliveryDetail",
     "desiredArrivalAt",
@@ -165,9 +164,21 @@ export default function NewWreathRequestPage() {
 
   function handleParsed(fields: ParsedInvitationFields) {
     if (fields.recipientName) setValue("recipientName", fields.recipientName, { shouldValidate: true });
-    if (fields.venueName) setValue("venueName", fields.venueName, { shouldValidate: true });
     if (fields.deliveryAddress) setValue("deliveryAddress", fields.deliveryAddress, { shouldValidate: true });
     if (fields.desiredArrivalAt) setValue("desiredArrivalAt", fields.desiredArrivalAt.slice(0, 16), { shouldValidate: true });
+  }
+
+  // 카카오(다음) 우편번호 서비스 — 배송주소는 직접 타이핑 대신 도로명주소
+  // 검색 팝업에서 골라 넣도록 한다. 상세주소(동/호수 등)는 별도 입력란에서 받는다.
+  function openAddressSearch() {
+    const daum = (window as typeof window & { daum?: any }).daum;
+    if (!daum?.Postcode) return;
+    new daum.Postcode({
+      oncomplete: (data: { roadAddress: string; jibunAddress: string; address: string }) => {
+        const address = data.roadAddress || data.jibunAddress || data.address;
+        setValue("deliveryAddress", address, { shouldValidate: true });
+      },
+    }).open();
   }
 
   async function goNext() {
@@ -247,7 +258,6 @@ export default function NewWreathRequestPage() {
         recipientName: values.recipientName,
         recipientPhone: values.recipientPhone,
         ordererPhone: values.ordererPhone,
-        venueName: values.venueName,
         deliveryAddress: values.deliveryAddress,
         deliveryDetail: values.deliveryDetail,
         desiredArrivalAt,
@@ -280,6 +290,7 @@ export default function NewWreathRequestPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
+      <Script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" strategy="afterInteractive" />
       <h1 className="text-lg font-semibold text-gray-900">화환 신청서 작성</h1>
       <StepIndicator step={step} />
 
@@ -497,13 +508,24 @@ export default function NewWreathRequestPage() {
               </div>
             </div>
             <div>
-              <label htmlFor="venueName">장소명 (예식장/장례식장 등)</label>
-              <input id="venueName" {...register("venueName")} className="w-full" />
-              {errors.venueName && <p className="mt-1 text-xs text-red-600">{errors.venueName.message}</p>}
-            </div>
-            <div>
               <label htmlFor="deliveryAddress">배송주소</label>
-              <input id="deliveryAddress" {...register("deliveryAddress")} className="w-full" />
+              <div className="flex gap-2">
+                <input
+                  id="deliveryAddress"
+                  readOnly
+                  placeholder="주소 검색 버튼을 눌러주세요"
+                  onClick={openAddressSearch}
+                  {...register("deliveryAddress")}
+                  className="w-full cursor-pointer bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={openAddressSearch}
+                  className="shrink-0 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  주소 검색
+                </button>
+              </div>
               {errors.deliveryAddress && <p className="mt-1 text-xs text-red-600">{errors.deliveryAddress.message}</p>}
             </div>
             <div>
@@ -617,7 +639,6 @@ export default function NewWreathRequestPage() {
                 </>
               )}
               <SummaryRow label="수령인" value={`${values.recipientName} / ${values.recipientPhone}`} />
-              <SummaryRow label="장소" value={values.venueName} />
               <SummaryRow label="배송지" value={`${values.deliveryAddress} ${values.deliveryDetail}`} />
               <SummaryRow label="도착 희망" value={values.desiredArrivalAt ? formatDateTime(`${values.desiredArrivalAt}:00`) : ""} />
               <SummaryRow label="리본" value={`${values.ribbonMessage} / ${values.ribbonSenderText}`} />

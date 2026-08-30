@@ -5,7 +5,6 @@
 // 분리해뒀다. 실제 제공자가 정해지면 이 인터페이스를 구현하는 어댑터만 추가하면 된다.
 export interface ParsedInvitationFields {
   recipientName?: string;
-  venueName?: string;
   deliveryAddress?: string;
   desiredArrivalAt?: string; // ISO 8601
 }

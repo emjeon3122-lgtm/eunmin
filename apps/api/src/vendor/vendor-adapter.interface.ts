@@ -4,7 +4,6 @@ export interface VendorMessagePayload {
   requestId: string;
   recipientPhone: string; // vendor.contactPhone (꽃집 사장님 번호)
   occasionType: string;
-  venueName: string;
   deliveryAddress: string;
   desiredArrivalAt: string;
   ribbonMessage: string;

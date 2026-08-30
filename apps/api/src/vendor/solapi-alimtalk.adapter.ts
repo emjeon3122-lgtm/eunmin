@@ -46,7 +46,6 @@ export class SolapiAlimtalkAdapter implements VendorAdapter {
           // 사전 심사된 템플릿의 변수명에 맞춰야 한다 — 실제 변수명은 템플릿 등록 시 확정.
           variables: {
             '#{occasionType}': occasionLabel(payload.occasionType),
-            '#{venueName}': payload.venueName,
             '#{deliveryAddress}': payload.deliveryAddress,
             '#{desiredArrivalAt}': payload.desiredArrivalAt,
             '#{ribbonMessage}': payload.ribbonMessage,

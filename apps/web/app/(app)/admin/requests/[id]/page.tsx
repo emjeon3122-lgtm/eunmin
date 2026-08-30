@@ -108,8 +108,10 @@ export default function AdminWreathRequestDetailPage() {
         />
         <Row label="수령인" value={`${request.recipientName} / ${request.recipientPhone}`} />
         <Row label="주문자 연락처" value={request.ordererPhone} />
-        <Row label="장소" value={`${request.venueName}${request.deliveryDetail ? ` ${request.deliveryDetail}` : ""}`} />
-        <Row label="배송 주소" value={request.deliveryAddress} />
+        <Row
+          label="배송 주소"
+          value={`${request.deliveryAddress}${request.deliveryDetail ? ` ${request.deliveryDetail}` : ""}`}
+        />
         <Row label="도착 희망" value={formatDateTime(request.desiredArrivalAt)} />
         <Row label="리본 문구" value={`${request.ribbonMessage} / ${request.ribbonSenderText}`} />
         {request.declaredAmount != null && (

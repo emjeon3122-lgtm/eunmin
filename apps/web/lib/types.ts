@@ -59,7 +59,6 @@ export interface WreathRequestDetail {
   recipientName: string;
   recipientPhone: string;
   ordererPhone: string;
-  venueName: string;
   deliveryAddress: string;
   deliveryDetail?: string | null;
   desiredArrivalAt: string;
@@ -157,7 +156,6 @@ export type VendorNextAction = "accept" | "complete" | null;
 
 export interface VendorStatusData {
   occasionType: OccasionType;
-  venueName: string;
   desiredArrivalAt: string;
   ribbonMessage: string;
   status: WreathStatus;
@@ -173,7 +171,6 @@ export interface Paginated<T> {
 // 항상 빈 값을 반환하는 Mock 어댑터가 응답한다 (apps/api/src/invitation-parser).
 export interface ParsedInvitationFields {
   recipientName?: string;
-  venueName?: string;
   deliveryAddress?: string;
   desiredArrivalAt?: string;
 }

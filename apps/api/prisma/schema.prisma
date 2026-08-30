@@ -145,7 +145,6 @@ model WreathRequest {
   recipientName       String        @map("recipient_name")
   recipientPhone      String        @map("recipient_phone")
   ordererPhone        String        @map("orderer_phone") // 신청자 본인 휴대폰(수령인 연락처와 별개)
-  venueName           String        @map("venue_name")
   deliveryAddress     String        @map("delivery_address")
   deliveryDetail      String?       @map("delivery_detail")
   desiredArrivalAt    DateTime      @map("desired_arrival_at")
