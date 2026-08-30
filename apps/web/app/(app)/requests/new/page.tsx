@@ -27,7 +27,7 @@ import {
   SEND_REASON_PLACEHOLDER,
   costCodeDefaultFor,
 } from "@/lib/wizard-defaults";
-import type { ParsedInvitationFields, Product, User } from "@/lib/types";
+import type { ParsedInvitationFields, User } from "@/lib/types";
 
 const schema = z
   .object({
@@ -39,8 +39,6 @@ const schema = z
     }),
     orchidType: z.enum(["oriental", "western"]).optional(),
     weddingSide: z.enum(["groom", "bride"]).optional(),
-    productId: z.string().min(1, "상품을 선택해주세요."),
-    declaredAmount: z.coerce.number().positive("금액을 입력해주세요."),
 
     clientName: z.string().optional(),
     contractType: z
@@ -81,7 +79,7 @@ const schema = z
 type FormValues = z.infer<typeof schema>;
 
 const STEP_FIELDS: Record<number, (keyof FormValues)[]> = {
-  2: ["requestType", "occasionType", "orchidType", "productId", "declaredAmount"],
+  2: ["requestType", "occasionType", "orchidType"],
   3: ["clientName", "contractType", "serviceName", "sendReason", "costCode"],
   4: [
     "recipientName",
@@ -122,16 +120,14 @@ export default function NewWreathRequestPage() {
 
   const [user, setUser] = useState<User | null>(null);
   const [step, setStep] = useState(1);
-  const [products, setProducts] = useState<Product[]>([]);
   const [proofAttachmentId, setProofAttachmentId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([apiGet<{ data: User }>("/auth/me"), apiGet<{ data: Product[] }>("/products")])
-      .then(([meRes, productsRes]) => {
+    apiGet<{ data: User }>("/auth/me")
+      .then((meRes) => {
         setUser(meRes.data);
-        setProducts(productsRes.data);
         if (meRes.data.isPartner) setStep(2);
       })
       .catch((err) => setLoadError(err instanceof ApiError ? err.message : "기초 데이터를 불러오지 못했습니다."));
@@ -161,13 +157,6 @@ export default function NewWreathRequestPage() {
       setValue("serviceName", undefined);
       setValue("costCode", costCodeDefaultFor(next));
     }
-  }
-
-  function handleProductChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const productId = e.target.value;
-    setValue("productId", productId, { shouldValidate: true });
-    const product = products.find((p) => p.id === productId);
-    if (product) setValue("declaredAmount", product.price, { shouldValidate: true });
   }
 
   function handleParsed(fields: ParsedInvitationFields) {
@@ -258,8 +247,6 @@ export default function NewWreathRequestPage() {
         deliveryAddress: values.deliveryAddress,
         deliveryDetail: values.deliveryDetail,
         desiredArrivalAt,
-        productId: values.productId,
-        declaredAmount: values.declaredAmount,
         ribbonMessage: values.ribbonMessage,
         ribbonSenderText: values.ribbonSenderText,
         clientName: values.clientName,
@@ -315,10 +302,10 @@ export default function NewWreathRequestPage() {
           </section>
         )}
 
-        {/* Section 2. 상품 및 경조사 선택 */}
+        {/* Section 2. 경조사 선택 */}
         {step === 2 && (
           <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-900">2. 상품 및 경조사 선택</h2>
+            <h2 className="text-sm font-semibold text-gray-900">2. 경조사 선택</h2>
 
             <div>
               <label>발송 대상</label>
@@ -405,27 +392,6 @@ export default function NewWreathRequestPage() {
               )}
 
               <OccasionReferenceImage occasionType={occasionType} orchidType={orchidType} />
-            </div>
-
-            <div>
-              <label htmlFor="productId">상품 선택</label>
-              <select id="productId" onChange={handleProductChange} defaultValue="" className="w-full sm:w-80">
-                <option value="" disabled>
-                  상품을 선택해주세요
-                </option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.price.toLocaleString("ko-KR")}원)
-                  </option>
-                ))}
-              </select>
-              <input type="hidden" {...register("productId")} />
-              {errors.productId && <p className="mt-1 text-xs text-red-600">{errors.productId.message}</p>}
-            </div>
-            <div>
-              <label htmlFor="declaredAmount">금액 (원)</label>
-              <input id="declaredAmount" type="number" min={0} step={1000} {...register("declaredAmount")} className="w-full sm:w-48" />
-              {errors.declaredAmount && <p className="mt-1 text-xs text-red-600">{errors.declaredAmount.message}</p>}
             </div>
 
             <div className="flex justify-between pt-2">
@@ -651,7 +617,6 @@ export default function NewWreathRequestPage() {
               <SummaryRow label="배송지" value={`${values.deliveryAddress} ${values.deliveryDetail}`} />
               <SummaryRow label="도착 희망" value={values.desiredArrivalAt ? formatDateTime(`${values.desiredArrivalAt}:00`) : ""} />
               <SummaryRow label="리본" value={`${values.ribbonMessage} / ${values.ribbonSenderText}`} />
-              <SummaryRow label="상품/금액" value={`${values.declaredAmount?.toLocaleString("ko-KR")}원`} />
               <SummaryRow label="주문자 연락처" value={values.ordererPhone} />
               {values.memo && <SummaryRow label="기타요청사항" value={values.memo} />}
               {!user.isPartner && (

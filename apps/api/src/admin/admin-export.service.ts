@@ -98,7 +98,11 @@ export class AdminExportService {
         recipientName: r.recipientName,
         ordererPhone: r.ordererPhone,
         deliveryAddress: r.deliveryAddress,
-        product: r.product ? `${r.product.name} / ${r.product.price.toLocaleString('ko-KR')}원` : `${r.declaredAmount.toLocaleString('ko-KR')}원`,
+        product: r.product
+          ? `${r.product.name} / ${r.product.price.toLocaleString('ko-KR')}원`
+          : r.declaredAmount != null
+            ? `${r.declaredAmount.toLocaleString('ko-KR')}원`
+            : '',
         ribbonMessage: `${r.ribbonMessage} / ${r.ribbonSenderText}`,
         clientName: r.clientName ?? '',
         contractType: r.contractType ? CONTRACT_TYPE_LABEL[r.contractType] ?? r.contractType : '',
@@ -126,7 +130,7 @@ export class AdminExportService {
         const dept = r.requester.department;
         const acc = byDept.get(dept) ?? { count: 0, amountSum: 0 };
         acc.count += 1;
-        acc.amountSum += r.declaredAmount;
+        acc.amountSum += r.declaredAmount ?? 0;
         byDept.set(dept, acc);
       }
       for (const [department, agg] of byDept.entries()) {

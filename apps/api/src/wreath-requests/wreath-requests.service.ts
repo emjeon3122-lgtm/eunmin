@@ -67,7 +67,7 @@ export class WreathRequestsService {
         desiredArrivalAt: new Date(dto.desiredArrivalAt),
         ribbonMessage: dto.ribbonMessage,
         ribbonSenderText: dto.ribbonSenderText,
-        declaredAmount: dto.declaredAmount,
+        declaredAmount: dto.declaredAmount ?? null,
         memo: dto.memo,
         clientName: dto.clientName,
         contractType: dto.contractType,

@@ -1,4 +1,4 @@
-const STEP_LABELS = ["파트너 검증", "상품·경조사", "비용코드", "주문 정보", "확인"];
+const STEP_LABELS = ["파트너 검증", "경조사 선택", "비용코드", "주문 정보", "확인"];
 
 export function StepIndicator({ step }: { step: number }) {
   return (

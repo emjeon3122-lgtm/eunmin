@@ -60,10 +60,11 @@ export class CreateWreathRequestDto {
   @IsUUID()
   productId?: string;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  declaredAmount: number;
+  declaredAmount?: number;
 
   @IsString()
   @MinLength(1)

@@ -65,7 +65,7 @@ export interface WreathRequestDetail {
   desiredArrivalAt: string;
   ribbonMessage: string;
   ribbonSenderText: string;
-  declaredAmount: number;
+  declaredAmount?: number | null;
   memo?: string | null;
   clientName?: string | null;
   contractType?: ContractType | null;

@@ -151,7 +151,7 @@ model WreathRequest {
   desiredArrivalAt    DateTime      @map("desired_arrival_at")
   ribbonMessage       String        @map("ribbon_message")
   ribbonSenderText    String        @map("ribbon_sender_text")
-  declaredAmount      Int           @map("declared_amount")
+  declaredAmount      Int?          @map("declared_amount")
 
   // Section 3 비용코드/발송사유 — requestType별로 쓰이는 필드가 다르다.
   // existing_client(Case A): clientName/contractType/serviceName

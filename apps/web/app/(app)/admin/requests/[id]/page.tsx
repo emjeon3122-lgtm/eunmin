@@ -112,7 +112,9 @@ export default function AdminWreathRequestDetailPage() {
         <Row label="배송 주소" value={request.deliveryAddress} />
         <Row label="도착 희망" value={formatDateTime(request.desiredArrivalAt)} />
         <Row label="리본 문구" value={`${request.ribbonMessage} / ${request.ribbonSenderText}`} />
-        <Row label="선언 금액" value={`${request.declaredAmount.toLocaleString("ko-KR")}원`} />
+        {request.declaredAmount != null && (
+          <Row label="선언 금액" value={`${request.declaredAmount.toLocaleString("ko-KR")}원`} />
+        )}
         {request.clientName && <Row label="고객사명" value={request.clientName} />}
         {request.contractType && <Row label="계약구분" value={CONTRACT_TYPE_LABELS[request.contractType]} />}
         {request.serviceName && <Row label="용역명" value={request.serviceName} />}
