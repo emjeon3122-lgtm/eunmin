@@ -47,12 +47,19 @@ export class SendToVendorService {
     try {
       const { providerMessageId } = await this.vendorAdapter.send({
         requestId,
-        recipientPhone: vendor.contactPhone,
+        vendorPhone: vendor.contactPhone,
         occasionType: request.occasionType,
+        weddingSide: request.weddingSide,
+        orchidType: request.orchidType,
+        recipientName: request.recipientName,
+        recipientPhone: request.recipientPhone,
+        ordererPhone: request.ordererPhone,
         deliveryAddress: request.deliveryAddress,
+        deliveryDetail: request.deliveryDetail,
         desiredArrivalAt: request.desiredArrivalAt.toISOString(),
         ribbonMessage: request.ribbonMessage,
         ribbonSenderText: request.ribbonSenderText,
+        memo: request.memo,
         statusLinkUrl,
       });
 

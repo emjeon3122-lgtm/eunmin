@@ -39,17 +39,25 @@ export class SolapiAlimtalkAdapter implements VendorAdapter {
         Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify({
-        to: payload.recipientPhone,
+        to: payload.vendorPhone,
         kakaoOptions: {
           pfId: this.senderKey,
           templateId: this.templateId,
           // 사전 심사된 템플릿의 변수명에 맞춰야 한다 — 실제 변수명은 템플릿 등록 시 확정.
+          // 주문 정보 입력 화면(신청서 4단계)에서 받은 배송 관련 정보는 전부 포함하되,
+          // 사번/부서/고객사/비용코드 등 내부 전용 정보는 VendorMessagePayload 타입
+          // 자체에 없으므로(vendor-adapter.interface.ts 참고) 여기서도 보낼 수 없다.
           variables: {
-            '#{occasionType}': occasionLabel(payload.occasionType),
+            '#{occasionType}': occasionLabel(payload.occasionType) + subOccasionLabel(payload),
+            '#{recipientName}': payload.recipientName,
+            '#{recipientPhone}': payload.recipientPhone,
+            '#{ordererPhone}': payload.ordererPhone,
             '#{deliveryAddress}': payload.deliveryAddress,
+            '#{deliveryDetail}': payload.deliveryDetail ?? '',
             '#{desiredArrivalAt}': payload.desiredArrivalAt,
             '#{ribbonMessage}': payload.ribbonMessage,
             '#{ribbonSenderText}': payload.ribbonSenderText,
+            '#{memo}': payload.memo ?? '',
           },
           buttons: [{ name: '주문 확인하기', type: 'WL', url: payload.statusLinkUrl }],
           disableSms: false, // 알림톡 실패 시 자동 SMS 대체발송 (알림톡을 선택한 핵심 이유)
@@ -69,4 +77,16 @@ function occasionLabel(type: string) {
   return (
     { wedding: '결혼', funeral: '부고', opening: '개업', promotion: '승진', etc: '기타' } as Record<string, string>
   )[type] ?? type;
+}
+
+// 결혼(신랑측/신부측)·개업·승진(동양란/서양란)처럼 상품 준비에 영향을 주는
+// 세부 선택지를 괄호로 덧붙인다 — 없으면 빈 문자열.
+function subOccasionLabel(payload: Pick<VendorMessagePayload, 'weddingSide' | 'orchidType'>) {
+  if (payload.weddingSide) {
+    return ` (${{ groom: '신랑측', bride: '신부측' }[payload.weddingSide] ?? payload.weddingSide})`;
+  }
+  if (payload.orchidType) {
+    return ` (${{ oriental: '동양란', western: '서양란' }[payload.orchidType] ?? payload.orchidType})`;
+  }
+  return '';
 }

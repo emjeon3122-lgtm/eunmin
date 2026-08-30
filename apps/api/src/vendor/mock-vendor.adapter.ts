@@ -10,8 +10,11 @@ export class MockVendorAdapter implements VendorAdapter {
 
   async send(payload: VendorMessagePayload): Promise<{ providerMessageId: string }> {
     this.logger.log(
-      `[MOCK 알림톡 발송] requestId=${payload.requestId} to=${payload.recipientPhone} ` +
-        `링크=${payload.statusLinkUrl} 리본="${payload.ribbonMessage} / ${payload.ribbonSenderText}"`,
+      `[MOCK 알림톡 발송] requestId=${payload.requestId} to(꽃집)=${payload.vendorPhone} ` +
+        `수령인=${payload.recipientName}(${payload.recipientPhone}) 주문자=${payload.ordererPhone} ` +
+        `배송지="${payload.deliveryAddress} ${payload.deliveryDetail ?? ''}" ` +
+        `도착희망=${payload.desiredArrivalAt} 리본="${payload.ribbonMessage} / ${payload.ribbonSenderText}" ` +
+        `기타요청="${payload.memo ?? ''}" 링크=${payload.statusLinkUrl}`,
     );
     return { providerMessageId: `mock-${randomUUID()}` };
   }
