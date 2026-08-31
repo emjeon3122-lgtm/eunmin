@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AttachmentType, UploaderType } from '@prisma/client';
+import { AttachmentType, UploaderType } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service.interface';
 

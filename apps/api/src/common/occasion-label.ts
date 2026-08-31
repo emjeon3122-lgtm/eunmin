@@ -1,4 +1,4 @@
-import { OccasionType } from '@prisma/client';
+import { OccasionType } from './enums';
 
 const LABELS: Record<OccasionType, string> = {
   wedding: '결혼',

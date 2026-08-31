@@ -34,7 +34,6 @@ if "%MISSING%"=="1" (
         echo 시스템을 최신화한 뒤 다시 실행해주세요. 또는 아래를 직접 설치해주세요:
         echo   - Git: https://git-scm.com/download/win
         echo   - Node.js LTS: https://nodejs.org
-        echo   - Docker Desktop: https://www.docker.com/products/docker-desktop
         pause
         exit /b 1
     )
@@ -82,10 +81,6 @@ if not exist "%ROOT%apps\api" (
     )
 )
 
-call :EnsureDockerRunning
-set "DOCKER_OK=0"
-if not errorlevel 1 set "DOCKER_OK=1"
-
 REM ---------- 1. 최신 코드로 자동 업데이트 ----------
 if exist "%REPO_ROOT%.git" (
     where git >nul 2>nul
@@ -121,44 +116,16 @@ if exist "%REPO_ROOT%.git" (
 )
 echo.
 
-REM ---------- 2. 데이터베이스^(PostgreSQL^) 기동 ----------
-if "%DOCKER_OK%"=="1" (
-    echo [1/6] 데이터베이스^(PostgreSQL^) 컨테이너를 띄웁니다...
-    docker compose up -d db
-    if errorlevel 1 (
-        echo [경고] Docker로 데이터베이스를 띄우지 못했습니다. Docker 없이 계속 진행합니다.
-        echo apps\api\.env의 DATABASE_URL이 실제 접속 가능한 PostgreSQL을 가리키는지 확인해주세요.
-    ) else (
-        echo 데이터베이스가 준비될 때까지 잠시 기다립니다...
-        timeout /t 8 /nobreak >nul
-    )
-) else (
-    echo [1/6] Docker를 사용하지 않고 진행합니다.
-    echo apps\api\.env의 DATABASE_URL이 실제 접속 가능한 PostgreSQL을 가리키는지 확인해주세요
-    echo ^(예: Neon, Supabase 같은 무료 클라우드 PostgreSQL^).
-)
+REM ---------- 2. 데이터베이스 ----------
+REM DB는 SQLite 파일(apps\api\prisma\dev.db) 하나라서 별도 서버/계정/Docker가 필요 없다.
+echo [1/5] 데이터베이스는 SQLite 파일을 사용합니다^(별도 설치 불필요^).
 
 REM ---------- 3. 백엔드 ----------
-echo [2/6] 백엔드^(apps\api^) 설정 파일을 준비합니다...
+echo [2/5] 백엔드^(apps\api^) 설정 파일을 준비합니다...
 cd /d "%REPO_ROOT%apps\api"
-set "ENV_JUST_CREATED=0"
-if not exist ".env" (
-    copy ".env.example" ".env" >nul
-    set "ENV_JUST_CREATED=1"
-)
+if not exist ".env" copy ".env.example" ".env" >nul
 
-if "%DOCKER_OK%"=="0" (
-    if "%ENV_JUST_CREATED%"=="1" (
-        echo.
-        echo [안내] apps\api\.env 파일을 새로 만들었습니다. Docker를 사용하지 않으므로
-        echo DATABASE_URL 값을 실제 접속 가능한 PostgreSQL 주소^(예: Neon^)로 바꿔야 합니다.
-        echo 메모장으로 apps\api\.env 파일을 열어 DATABASE_URL="..." 줄을 교체한 뒤,
-        echo 이 창에서 아무 키나 눌러 계속하세요.
-        pause
-    )
-)
-
-echo [3/6] 백엔드 패키지를 설치합니다^(최초 1회 또는 업데이트 후에는 시간이 걸립니다^)...
+echo [3/5] 백엔드 패키지를 설치합니다^(최초 1회 또는 업데이트 후에는 시간이 걸립니다^)...
 call npm install
 if errorlevel 1 (
     echo [오류] 백엔드 npm install에 실패했습니다. 위 오류 메시지를 확인해주세요.
@@ -166,11 +133,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [4/6] 데이터베이스 마이그레이션과 샘플 데이터를 준비합니다...
+echo [4/5] 데이터베이스 마이그레이션과 샘플 데이터를 준비합니다...
 call npx prisma migrate deploy
 if errorlevel 1 (
-    echo [경고] 마이그레이션에 실패했습니다. 데이터베이스가 아직 켜지는 중일 수 있습니다.
-    echo 잠시^(10초 정도^) 기다렸다가 이 파일을 다시 실행해보세요.
+    echo [오류] 데이터베이스 준비에 실패했습니다. 위 오류 메시지를 확인해주세요.
     pause
     exit /b 1
 )
@@ -181,7 +147,7 @@ echo 백엔드 서버를 새 창에서 실행합니다^(http://localhost:4000^).
 start "화환앱-백엔드 (이 창을 닫으면 서버가 종료됩니다)" cmd /k "cd /d %REPO_ROOT%apps\api && npm run dev"
 
 REM ---------- 4. 프론트엔드 ----------
-echo [5/6] 프론트엔드^(apps\web^) 설정 파일을 준비합니다...
+echo [5/5] 프론트엔드^(apps\web^)를 준비하고 실행합니다...
 cd /d "%REPO_ROOT%apps\web"
 if not exist ".env.local" copy ".env.example" ".env.local" >nul
 
@@ -193,7 +159,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [6/6] 프론트엔드 서버를 새 창에서 실행합니다^(http://localhost:3000^)...
+echo 프론트엔드 서버를 새 창에서 실행합니다^(http://localhost:3000^)...
 start "화환앱-프론트엔드 (이 창을 닫으면 서버가 종료됩니다)" cmd /k "cd /d %REPO_ROOT%apps\web && npm run dev"
 
 echo.
@@ -212,10 +178,6 @@ echo  다음에 이 파일을 다시 실행하면, 코드가 업데이트된 경
 echo  자동으로 최신 버전을 받아온 뒤 실행합니다.
 echo.
 echo  종료하려면 새로 열린 검은 창 2개^(백엔드/프론트엔드^)를 각각 닫아주세요.
-if "%DOCKER_OK%"=="1" (
-    echo  데이터베이스는 계속 필요하면 그대로 두고, 완전히 정리하려면
-    echo  "docker compose down"을 실행하세요.
-)
 echo ============================================
 pause
 endlocal
@@ -250,32 +212,3 @@ for /f "skip=2 tokens=3*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Cont
 for /f "skip=2 tokens=3*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%A %%B"
 set "PATH=%SYS_PATH%;%USR_PATH%;%PATH%"
 exit /b 0
-
-:EnsureDockerRunning
-REM Docker는 이제 필수가 아니다 — 없거나 안 켜져 있으면 조용히 건너뛰고
-REM DATABASE_URL이 가리키는 다른 PostgreSQL(예: Neon)을 쓰도록 메인 흐름에 맡긴다.
-where docker >nul 2>nul
-if errorlevel 1 exit /b 1
-
-docker info >nul 2>nul
-if not errorlevel 1 exit /b 0
-
-echo Docker가 설치되어 있어 Docker Desktop을 실행해봅니다...
-set "DOCKER_EXE=%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
-if exist "%DOCKER_EXE%" start "" "%DOCKER_EXE%"
-
-set "DOCKER_TRIES=0"
-:WaitForDockerLoop
-docker info >nul 2>nul
-if not errorlevel 1 (
-    echo Docker 엔진이 준비되었습니다.
-    exit /b 0
-)
-set /a DOCKER_TRIES+=1
-if !DOCKER_TRIES! GEQ 15 (
-    echo [안내] Docker 엔진이 켜지지 않아 Docker 없이 계속 진행합니다.
-    exit /b 1
-)
-echo   ...Docker 엔진이 켜지길 기다리는 중 ^(!DOCKER_TRIES!/15^)
-timeout /t 3 /nobreak >nul
-goto :WaitForDockerLoop

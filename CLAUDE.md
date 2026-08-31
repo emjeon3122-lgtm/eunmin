@@ -9,7 +9,9 @@ This repo holds two unrelated things:
 1. **경조사 화환 자동 발송 앱** (`apps/api`, `apps/web`, `docs/`) — the main project. See
    [`README.md`](./README.md) for how to run it and [`docs/`](./docs) for the full design spec
    (architecture/DB, API, frontend wireframes, backend integration). Backend is NestJS + Prisma +
-   PostgreSQL; frontend is Next.js 14 (App Router). SSO login and the Kakao 친구톡 vendor
+   SQLite (single file at `apps/api/prisma/dev.db` — no DB server, no Docker; Prisma enums are
+   unsupported on SQLite so they live in `apps/api/src/common/enums.ts` as const objects);
+   frontend is Next.js 14 (App Router). SSO login and the Kakao 친구톡 vendor
    dispatch are both behind swappable adapter interfaces and currently run against dev-mode Mock
    implementations (`AUTH_MODE=mock`, `VENDOR_ADAPTER=mock`) since the real IdP/CPaaS aren't
    chosen yet — see the README's "아직 실제 연동이 필요한 부분" section before wiring up

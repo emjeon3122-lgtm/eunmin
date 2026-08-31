@@ -1,5 +1,5 @@
 import { IsBoolean, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
-import { FallbackChannel, VendorChannelType } from '@prisma/client';
+import { FallbackChannel, VendorChannelType } from '../../common/enums';
 
 export class VendorUpdateDto {
   @IsOptional()

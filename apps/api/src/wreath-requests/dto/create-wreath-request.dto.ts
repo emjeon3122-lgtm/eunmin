@@ -9,7 +9,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ContractType, OccasionType, OrchidType, RequestType, WeddingSide } from '@prisma/client';
+import { ContractType, OccasionType, OrchidType, RequestType, WeddingSide } from '../../common/enums';
 
 export class CreateWreathRequestDto {
   @IsEnum(RequestType)

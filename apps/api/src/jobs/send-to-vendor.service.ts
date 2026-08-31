@@ -40,7 +40,8 @@ export class SendToVendorService {
         requestId,
         channel: 'kakao_alimtalk',
         status: 'pending',
-        payload: { statusLinkUrl },
+        // SQLite에는 Json 타입이 없어 문자열로 저장한다(스키마의 payload: String).
+        payload: JSON.stringify({ statusLinkUrl }),
       },
     });
 

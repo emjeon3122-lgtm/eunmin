@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
-import { RequestStatus } from '@prisma/client';
+import { RequestStatus } from '../../common/enums';
 
 export class ListAdminWreathRequestsQueryDto {
   @IsOptional()

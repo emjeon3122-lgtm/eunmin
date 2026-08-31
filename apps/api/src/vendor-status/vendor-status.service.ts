@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { RequestStatus } from '@prisma/client';
+import { RequestStatus } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service.interface';
@@ -93,13 +93,13 @@ export class VendorStatusService {
     return request;
   }
 
-  private nextActionFor(status: RequestStatus): NextAction {
+  private nextActionFor(status: string): NextAction {
     if (status === 'submitted_to_vendor') return 'accept';
     if (status === 'accepted') return 'complete';
     return null;
   }
 
-  private assertTransition(current: RequestStatus, required: RequestStatus, action: string) {
+  private assertTransition(current: string, required: RequestStatus, action: string) {
     if (current !== required) {
       throw new InvalidStatusTransitionException(
         `이미 처리되었거나 아직 처리할 수 없는 단계입니다. (요청: ${action}, 현재 상태: ${current})`,

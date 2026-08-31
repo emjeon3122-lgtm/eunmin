@@ -16,9 +16,8 @@
 
 ```
 apps/
-  api/   NestJS + Prisma + PostgreSQL — REST API 서버
+  api/   NestJS + Prisma + SQLite — REST API 서버
   web/   Next.js 14 (App Router) — 반응형 웹 클라이언트
-docker-compose.yml   로컬 개발용 PostgreSQL
 ```
 
 ## 로컬 실행
@@ -26,28 +25,19 @@ docker-compose.yml   로컬 개발용 PostgreSQL
 Windows에서는 저장소를 미리 clone하지 않고 [`run_local_test.bat`](./run_local_test.bat) 파일
 하나만 아무 폴더에 받아서 더블클릭해도 됩니다 — Git/Node.js가 없으면 자동 설치(winget, 최초
 1회 관리자 권한 필요) → 프로젝트 파일이 없으면 이 저장소를 옆에 자동으로 clone(GitHub 로그인
-필요할 수 있음) → git 저장소면 최신 커밋으로 자동 업데이트 → DB 기동 → 백엔드/프론트엔드
-설치·마이그레이션·시드·실행 → 브라우저 열기까지 한 번에 처리합니다. Docker는 필수가
-아닙니다 — 설치돼 있으면 자동으로 로컬 DB 컨테이너를 띄우고, 없으면 건너뛰고
-`apps/api/.env`의 `DATABASE_URL`이 가리키는 PostgreSQL을 그대로 사용합니다(Neon 등 무료
-클라우드 PostgreSQL을 붙여도 됩니다).
+필요할 수 있음) → git 저장소면 최신 커밋으로 자동 업데이트 → 백엔드/프론트엔드
+설치·마이그레이션·시드·실행 → 브라우저 열기까지 한 번에 처리합니다.
 
-### 1. DB 기동
+DB는 **SQLite 파일 하나**(`apps/api/prisma/dev.db`)로 동작해서 별도 DB 서버나 Docker,
+계정 가입이 필요 없습니다. 파일을 지우고 마이그레이션을 다시 돌리면 언제든 초기화됩니다.
 
-```bash
-docker compose up -d db
-```
-
-(Docker를 쓸 수 없는 환경이라면 로컬 PostgreSQL 16을 직접 띄우고 `apps/api/.env`의
-`DATABASE_URL`을 맞춰도 됩니다.)
-
-### 2. 백엔드 (apps/api)
+### 1. 백엔드 (apps/api)
 
 ```bash
 cd apps/api
 cp .env.example .env      # 필요시 값 수정
 npm install
-npm run prisma:migrate    # 스키마 반영 (최초 1회, 이미 생성된 migrations/ 적용)
+npx prisma migrate deploy # 스키마 반영 (SQLite 파일 자동 생성)
 npm run prisma:seed       # 샘플 유저/꽃집/상품/규칙 시드
 npm run dev                # http://localhost:4000/api
 ```
@@ -55,7 +45,7 @@ npm run dev                # http://localhost:4000/api
 시드 후 콘솔에 출력되는 사번으로 개발 로그인(`POST /api/auth/dev-login`)할 수 있습니다:
 `A0001`(관리자), `E1001`/`E1002`(임직원).
 
-### 3. 프론트엔드 (apps/web)
+### 2. 프론트엔드 (apps/web)
 
 ```bash
 cd apps/web
@@ -113,7 +103,7 @@ OCR 등) 또는 청첩장 URL 파싱 서비스가 정해지면 `InvitationParser
 
 ## 검증한 내용
 
-- 백엔드: `tsc --noEmit`, `nest build` 통과. 로컬 PostgreSQL에 마이그레이션/시드를 적용하고
+- 백엔드: `tsc --noEmit`, `nest build` 통과. SQLite에 마이그레이션/시드를 적용하고
   실제 서버를 띄운 뒤 신청 제출 → Mock 꽃집 발송 → 원터치 접수/완료(사진 업로드) →
   관리자 목록/상세/취소/수동처리/엑셀 추출까지 curl로 전 구간을 직접 실행해 확인했습니다.
 - 프론트엔드: `tsc --noEmit`, `next build` 통과. Playwright(Chromium)로 로그인 →

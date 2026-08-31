@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
-import { Prisma, RequestStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RequestStatus } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { occasionLabel } from '../common/occasion-label';
 import { ExportQueryDto } from './dto/export-query.dto';

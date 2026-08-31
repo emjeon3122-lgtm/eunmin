@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { ApprovalRule, OccasionType } from '@prisma/client';
+import { ApprovalRule } from '@prisma/client';
+import { OccasionType } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface ApprovalCheckResult {

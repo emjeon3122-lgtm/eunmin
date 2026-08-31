@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from './jwt.types';
+import { Role, assertEnum } from '../common/enums';
 
 @Injectable()
 export class AuthService {
@@ -18,7 +19,11 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException(`사번 '${employeeNo}'에 해당하는 사용자를 찾을 수 없습니다.`);
     }
-    const payload: JwtPayload = { sub: user.id, employeeNo: user.employeeNo, role: user.role };
+    const payload: JwtPayload = {
+      sub: user.id,
+      employeeNo: user.employeeNo,
+      role: assertEnum(Role, user.role, 'user.role'),
+    };
     const token = this.jwtService.sign(payload);
     return { token, user: payload };
   }

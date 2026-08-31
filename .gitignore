@@ -8,3 +8,5 @@ build/
 .DS_Store
 apps/api/uploads/
 apps/api/generated/
+*.db
+*.db-journal

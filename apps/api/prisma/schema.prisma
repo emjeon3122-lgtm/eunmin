@@ -3,113 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-}
-
-enum Role {
-  employee
-  admin
-}
-
-enum RequestType {
-  self
-  existing_client
-  prospective_client
-}
-
-enum WeddingSide {
-  groom
-  bride
-}
-
-enum OrchidType {
-  oriental
-  western
-}
-
-enum ContractType {
-  external_audit
-  voluntary_audit
-  tax
-  bookkeeping
-  internal_accounting
-  other_advisory
-}
-
-enum OccasionType {
-  wedding
-  funeral
-  opening
-  promotion
-  etc
-}
-
-enum OccasionTypeFilter {
-  wedding
-  funeral
-  opening
-  promotion
-  etc
-  all
-}
-
-enum RequestStatus {
-  draft
-  submitted
-  submitted_to_vendor
-  accepted
-  completed
-  cancelled
-}
-
-enum AttachmentType {
-  pre_approval_proof
-  delivery_completion_photo
-}
-
-enum UploaderType {
-  employee
-  vendor
-}
-
-enum VendorChannelType {
-  kakao_friendtalk
-  kakao_alimtalk
-  api
-  email
-}
-
-enum FallbackChannel {
-  manual_admin_alert
-  sms
-  none
-}
-
-enum TransmissionChannel {
-  kakao_friendtalk
-  kakao_alimtalk
-  sms_fallback
-  api
-  email
-}
-
-enum TransmissionStatus {
-  pending
-  sent
-  failed
-  acked
-}
-
-enum NotificationChannel {
-  email
-  kakao_alimtalk
-  in_app
-}
-
-enum NotificationStatus {
-  sent
-  failed
 }
 
 model User {
@@ -120,7 +15,7 @@ model User {
   email        String   @unique
   phone        String?
   ssoSubjectId String   @unique @map("sso_subject_id")
-  role         Role     @default(employee)
+  role         String   @default("employee")
   // 파트너(고위 직급) 여부 — false면 신청 시 파트너 승인 증빙 첨부가 필수다
   // (기존 금액 기준 사전승인 규칙을 대체하는 새 게이팅 기준).
   isPartner    Boolean  @default(false) @map("is_partner")
@@ -138,10 +33,10 @@ model WreathRequest {
   requesterId         String        @map("requester_id")
   requester           User          @relation("Requester", fields: [requesterId], references: [id])
 
-  requestType         RequestType   @map("request_type")
-  occasionType        OccasionType  @map("occasion_type")
-  weddingSide         WeddingSide?  @map("wedding_side") // occasionType=wedding일 때만 사용
-  orchidType          OrchidType?   @map("orchid_type")  // occasionType=opening/promotion일 때만 사용
+  requestType         String        @map("request_type")
+  occasionType        String        @map("occasion_type")
+  weddingSide         String?       @map("wedding_side") // occasionType=wedding일 때만 사용
+  orchidType          String?       @map("orchid_type")  // occasionType=opening/promotion일 때만 사용
   recipientName       String        @map("recipient_name")
   recipientPhone      String        @map("recipient_phone")
   ordererPhone        String        @map("orderer_phone") // 신청자 본인 휴대폰(수령인 연락처와 별개)
@@ -156,7 +51,7 @@ model WreathRequest {
   // existing_client(Case A): clientName/contractType/serviceName
   // prospective_client(Case B) · self(Case C): sendReason + costCode
   clientName          String?       @map("client_name")
-  contractType        ContractType? @map("contract_type")
+  contractType        String?       @map("contract_type")
   serviceName         String?       @map("service_name")
   sendReason          String?       @map("send_reason")
   // 정산용 비용 코드 — 사내 DB/엑셀 추출에만 쓰이는 내부 전용 필드. 꽃집에게 보내는
@@ -172,7 +67,7 @@ model WreathRequest {
   attachmentId        String?       @unique @map("attachment_id")
   attachment          Attachment?   @relation("PreApprovalAttachment", fields: [attachmentId], references: [id])
 
-  status              RequestStatus @default(draft)
+  status              String        @default("draft")
 
   vendorId            String?       @map("vendor_id")
   vendor              Vendor?       @relation(fields: [vendorId], references: [id])
@@ -204,8 +99,8 @@ model Attachment {
   fileName            String         @map("file_name")
   fileUrl             String         @map("file_url")
   mimeType             String         @map("mime_type")
-  type                AttachmentType
-  uploaderType        UploaderType   @map("uploader_type")
+  type                String
+  uploaderType        String         @map("uploader_type")
   uploadedById        String?        @map("uploaded_by")
   uploadedAt          DateTime       @default(now()) @map("uploaded_at")
 
@@ -221,7 +116,7 @@ model Attachment {
 
 model ApprovalRule {
   id           String             @id @default(uuid())
-  occasionType OccasionTypeFilter @map("occasion_type")
+  occasionType String             @map("occasion_type")
   minAmount    Int                @map("min_amount")
   isActive     Boolean            @default(true) @map("is_active")
   description  String?
@@ -232,11 +127,11 @@ model ApprovalRule {
 model Vendor {
   id                       String            @id @default(uuid())
   name                     String
-  channelType              VendorChannelType @map("channel_type")
+  channelType              String            @map("channel_type")
   contactPhone             String            @map("contact_phone")
   kakaoChannelId           String?           @map("kakao_channel_id")
   isChannelFriendConfirmed Boolean           @default(false) @map("is_channel_friend_confirmed")
-  fallbackChannel          FallbackChannel   @default(manual_admin_alert) @map("fallback_channel")
+  fallbackChannel          String            @default("manual_admin_alert") @map("fallback_channel")
   isActive                 Boolean           @default(true) @map("is_active")
 
   products Product[]
@@ -261,7 +156,7 @@ model Product {
 
 model RibbonTemplate {
   id           String       @id @default(uuid())
-  occasionType OccasionType @map("occasion_type")
+  occasionType String       @map("occasion_type")
   phraseKo     String       @map("phrase_ko")
   phraseHanja  String?      @map("phrase_hanja")
   isActive     Boolean      @default(true) @map("is_active")
@@ -273,9 +168,9 @@ model OrderTransmission {
   id                String               @id @default(uuid())
   requestId         String               @map("request_id")
   request           WreathRequest        @relation(fields: [requestId], references: [id])
-  channel           TransmissionChannel
-  payload           Json
-  status            TransmissionStatus   @default(pending)
+  channel           String
+  payload           String
+  status            String               @default("pending")
   providerMessageId String?              @unique @map("provider_message_id")
   responseBody      String?              @map("response_body")
   attemptedAt       DateTime             @default(now()) @map("attempted_at")
@@ -289,9 +184,9 @@ model Notification {
   user      User                 @relation(fields: [userId], references: [id])
   requestId String?              @map("request_id")
   request   WreathRequest?       @relation(fields: [requestId], references: [id])
-  channel   NotificationChannel
+  channel   String
   message   String
-  status    NotificationStatus   @default(sent)
+  status    String               @default("sent")
   sentAt    DateTime             @default(now()) @map("sent_at")
 
   @@map("notifications")
