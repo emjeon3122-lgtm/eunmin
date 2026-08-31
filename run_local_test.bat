@@ -82,24 +82,33 @@ if not exist "%ROOT%apps\api" (
 )
 
 REM ---------- 1. 최신 코드로 자동 업데이트 ----------
+REM git -C 에 넘기는 경로는 끝의 백슬래시를 떼야 한다. "C:\경로\" 처럼 \" 로 끝나면
+REM Windows가 따옴표를 escape 처리해서 git이 경로를 제대로 못 받는다.
+set "REPO_DIR=%REPO_ROOT%"
+if "%REPO_DIR:~-1%"=="\" set "REPO_DIR=%REPO_DIR:~0,-1%"
+
 if exist "%REPO_ROOT%.git" (
     where git >nul 2>nul
     if not errorlevel 1 (
         echo [업데이트 확인] 최신 코드가 있는지 확인합니다...
-        for /f "delims=" %%b in ('git -C "%REPO_ROOT%" rev-parse --abbrev-ref HEAD 2^>nul') do set "CURBRANCH=%%b"
-        git -C "%REPO_ROOT%" fetch origin "!CURBRANCH!" >nul 2>nul
+        for /f "delims=" %%b in ('git -C "%REPO_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do set "CURBRANCH=%%b"
+        git -C "%REPO_DIR%" fetch origin "!CURBRANCH!" >nul 2>nul
 
-        set "BEHIND=0"
-        for /f %%c in ('git -C "%REPO_ROOT%" rev-list HEAD.."origin/!CURBRANCH!" --count 2^>nul') do set "BEHIND=%%c"
+        set "BEHIND=unknown"
+        for /f %%c in ('git -C "%REPO_DIR%" rev-list HEAD.."origin/!CURBRANCH!" --count 2^>nul') do set "BEHIND=%%c"
 
-        if not "!BEHIND!"=="0" (
-            git -C "%REPO_ROOT%" status --porcelain > "%TEMP%\wreath_git_status.tmp" 2>nul
+        if "!BEHIND!"=="unknown" (
+            echo [안내] 업데이트 상태를 확인하지 못했습니다. 현재 받아둔 코드로 진행합니다.
+        ) else if "!BEHIND!"=="0" (
+            echo 이미 최신 버전입니다.
+        ) else (
+            git -C "%REPO_DIR%" status --porcelain > "%TEMP%\wreath_git_status.tmp" 2>nul
             for %%A in ("%TEMP%\wreath_git_status.tmp") do set "DIRTY_SIZE=%%~zA"
             del "%TEMP%\wreath_git_status.tmp" >nul 2>nul
 
             if "!DIRTY_SIZE!"=="0" (
-                echo 새 업데이트를 내려받습니다^(!CURBRANCH!^)...
-                git -C "%REPO_ROOT%" pull --ff-only origin "!CURBRANCH!"
+                echo 새 업데이트 !BEHIND!건을 내려받습니다^(!CURBRANCH!^)...
+                git -C "%REPO_DIR%" pull --ff-only origin "!CURBRANCH!"
                 if errorlevel 1 (
                     echo [안내] 자동 업데이트에 실패했습니다. 필요하면 직접 "git pull"을 실행해주세요.
                 ) else (
@@ -109,8 +118,6 @@ if exist "%REPO_ROOT%.git" (
                 echo [안내] 로컬에 저장하지 않은 변경사항이 있어 자동 업데이트를 건너뜁니다.
                 echo        필요하면 변경사항을 커밋/백업한 뒤 직접 "git pull"을 실행해주세요.
             )
-        ) else (
-            echo 이미 최신 버전입니다.
         )
     )
 )
@@ -124,6 +131,16 @@ REM ---------- 3. 백엔드 ----------
 echo [2/5] 백엔드^(apps\api^) 설정 파일을 준비합니다...
 cd /d "%REPO_ROOT%apps\api"
 if not exist ".env" copy ".env.example" ".env" >nul
+
+REM 예전 PostgreSQL 시절의 .env가 남아 있으면 SQLite 설정으로 갱신한다
+REM (.env는 이미 있으면 덮어쓰지 않기 때문에 그냥 두면 옛 DATABASE_URL이 계속 쓰인다).
+findstr /C:"file:./dev.db" ".env" >nul
+if errorlevel 1 (
+    echo [안내] .env가 예전 PostgreSQL 설정이라 최신 설정으로 갱신합니다.
+    echo        기존 파일은 .env.bak 으로 백업합니다.
+    copy /y ".env" ".env.bak" >nul
+    copy /y ".env.example" ".env" >nul
+)
 
 echo [3/5] 백엔드 패키지를 설치합니다^(최초 1회 또는 업데이트 후에는 시간이 걸립니다^)...
 call npm install

@@ -10,3 +10,4 @@ apps/api/uploads/
 apps/api/generated/
 *.db
 *.db-journal
+.env.bak
