@@ -82,8 +82,8 @@ if not exist "%ROOT%apps\api" (
 )
 
 REM ---------- 1. 최신 코드로 자동 업데이트 ----------
-REM git -C 에 넘기는 경로는 끝의 백슬래시를 떼야 한다. "C:\경로\" 처럼 \" 로 끝나면
-REM Windows가 따옴표를 escape 처리해서 git이 경로를 제대로 못 받는다.
+REM git -C 에 넘길 경로는 끝의 백슬래시를 떼야 한다. 경로가 백슬래시로 끝나면
+REM Windows가 뒤따르는 따옴표를 escape 문자로 처리해 git이 경로를 못 받는다.
 set "REPO_DIR=%REPO_ROOT%"
 if "%REPO_DIR:~-1%"=="\" set "REPO_DIR=%REPO_DIR:~0,-1%"
 
@@ -102,21 +102,16 @@ if exist "%REPO_ROOT%.git" (
         ) else if "!BEHIND!"=="0" (
             echo 이미 최신 버전입니다.
         ) else (
-            git -C "%REPO_DIR%" status --porcelain > "%TEMP%\wreath_git_status.tmp" 2>nul
-            for %%A in ("%TEMP%\wreath_git_status.tmp") do set "DIRTY_SIZE=%%~zA"
-            del "%TEMP%\wreath_git_status.tmp" >nul 2>nul
-
-            if "!DIRTY_SIZE!"=="0" (
-                echo 새 업데이트 !BEHIND!건을 내려받습니다^(!CURBRANCH!^)...
-                git -C "%REPO_DIR%" pull --ff-only origin "!CURBRANCH!"
-                if errorlevel 1 (
-                    echo [안내] 자동 업데이트에 실패했습니다. 필요하면 직접 "git pull"을 실행해주세요.
-                ) else (
-                    echo 업데이트 완료. 최신 코드로 계속 진행합니다.
-                )
+            echo 새 업데이트 !BEHIND!건을 내려받습니다^(!CURBRANCH!^)...
+            REM --ff-only 는 로컬 변경을 덮어쓰지 않고 거부하므로 안전하다.
+            git -C "%REPO_DIR%" pull --ff-only origin "!CURBRANCH!"
+            if errorlevel 1 (
+                echo.
+                echo [안내] 자동 업데이트를 하지 못했습니다^(위 git 메시지 참고^).
+                echo        로컬에 수정한 내용이 있으면 백업 후 아래를 실행해주세요:
+                echo          git -C "%REPO_DIR%" reset --hard origin/!CURBRANCH!
             ) else (
-                echo [안내] 로컬에 저장하지 않은 변경사항이 있어 자동 업데이트를 건너뜁니다.
-                echo        필요하면 변경사항을 커밋/백업한 뒤 직접 "git pull"을 실행해주세요.
+                echo 업데이트 완료. 최신 코드로 계속 진행합니다.
             )
         )
     )
