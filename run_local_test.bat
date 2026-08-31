@@ -43,29 +43,53 @@ if "%MISSING%"=="1" (
     call :EnsureTool node OpenJS.NodeJS.LTS "Node.js"
 )
 
+REM ---------- 0.5. 프로젝트 파일 확인/자동 다운로드 ----------
+REM 이 .bat 파일만 다른 폴더(바탕화면 등)로 복사해서 실행해도 동작하도록,
+REM 저장소가 없으면 이 폴더 밑에 "eunmin" 폴더로 자동으로 내려받는다.
+set "REPO_URL=https://github.com/emjeon3122-lgtm/eunmin.git"
+set "REPO_BRANCH=claude/app-development-project-eun5fu"
+set "REPO_ROOT=%ROOT%"
+
+if not exist "%ROOT%apps\api" (
+    if exist "%ROOT%eunmin\apps\api" (
+        set "REPO_ROOT=%ROOT%eunmin\"
+    ) else (
+        echo 프로젝트 파일이 없어 저장소를 내려받습니다^(최초 1회^)...
+        echo GitHub 로그인 창이 뜨면 로그인해주세요.
+        git clone -b "%REPO_BRANCH%" "%REPO_URL%" "%ROOT%eunmin"
+        if errorlevel 1 (
+            echo [오류] 저장소를 내려받지 못했습니다. 인터넷 연결이나 GitHub 로그인을
+            echo 확인한 뒤 다시 실행해주세요.
+            pause
+            exit /b 1
+        )
+        set "REPO_ROOT=%ROOT%eunmin\"
+    )
+)
+
 call :EnsureDockerRunning
 set "DOCKER_OK=0"
 if not errorlevel 1 set "DOCKER_OK=1"
 
 REM ---------- 1. 최신 코드로 자동 업데이트 ----------
-if exist "%ROOT%.git" (
+if exist "%REPO_ROOT%.git" (
     where git >nul 2>nul
     if not errorlevel 1 (
         echo [업데이트 확인] 최신 코드가 있는지 확인합니다...
-        for /f "delims=" %%b in ('git -C "%ROOT%" rev-parse --abbrev-ref HEAD 2^>nul') do set "CURBRANCH=%%b"
-        git -C "%ROOT%" fetch origin "!CURBRANCH!" >nul 2>nul
+        for /f "delims=" %%b in ('git -C "%REPO_ROOT%" rev-parse --abbrev-ref HEAD 2^>nul') do set "CURBRANCH=%%b"
+        git -C "%REPO_ROOT%" fetch origin "!CURBRANCH!" >nul 2>nul
 
         set "BEHIND=0"
-        for /f %%c in ('git -C "%ROOT%" rev-list HEAD.."origin/!CURBRANCH!" --count 2^>nul') do set "BEHIND=%%c"
+        for /f %%c in ('git -C "%REPO_ROOT%" rev-list HEAD.."origin/!CURBRANCH!" --count 2^>nul') do set "BEHIND=%%c"
 
         if not "!BEHIND!"=="0" (
-            git -C "%ROOT%" status --porcelain > "%TEMP%\wreath_git_status.tmp" 2>nul
+            git -C "%REPO_ROOT%" status --porcelain > "%TEMP%\wreath_git_status.tmp" 2>nul
             for %%A in ("%TEMP%\wreath_git_status.tmp") do set "DIRTY_SIZE=%%~zA"
             del "%TEMP%\wreath_git_status.tmp" >nul 2>nul
 
             if "!DIRTY_SIZE!"=="0" (
                 echo 새 업데이트를 내려받습니다^(!CURBRANCH!^)...
-                git -C "%ROOT%" pull --ff-only origin "!CURBRANCH!"
+                git -C "%REPO_ROOT%" pull --ff-only origin "!CURBRANCH!"
                 if errorlevel 1 (
                     echo [안내] 자동 업데이트에 실패했습니다. 필요하면 직접 "git pull"을 실행해주세요.
                 ) else (
@@ -101,7 +125,7 @@ if "%DOCKER_OK%"=="1" (
 
 REM ---------- 3. 백엔드 ----------
 echo [2/6] 백엔드^(apps\api^) 설정 파일을 준비합니다...
-cd /d "%ROOT%apps\api"
+cd /d "%REPO_ROOT%apps\api"
 set "ENV_JUST_CREATED=0"
 if not exist ".env" (
     copy ".env.example" ".env" >nul
@@ -139,11 +163,11 @@ call npx prisma generate
 call npm run prisma:seed
 
 echo 백엔드 서버를 새 창에서 실행합니다^(http://localhost:4000^)...
-start "화환앱-백엔드 (이 창을 닫으면 서버가 종료됩니다)" cmd /k "cd /d %ROOT%apps\api && npm run dev"
+start "화환앱-백엔드 (이 창을 닫으면 서버가 종료됩니다)" cmd /k "cd /d %REPO_ROOT%apps\api && npm run dev"
 
 REM ---------- 4. 프론트엔드 ----------
 echo [5/6] 프론트엔드^(apps\web^) 설정 파일을 준비합니다...
-cd /d "%ROOT%apps\web"
+cd /d "%REPO_ROOT%apps\web"
 if not exist ".env.local" copy ".env.example" ".env.local" >nul
 
 echo 프론트엔드 패키지를 설치합니다^(최초 1회 또는 업데이트 후에는 시간이 걸립니다^)...
@@ -155,7 +179,7 @@ if errorlevel 1 (
 )
 
 echo [6/6] 프론트엔드 서버를 새 창에서 실행합니다^(http://localhost:3000^)...
-start "화환앱-프론트엔드 (이 창을 닫으면 서버가 종료됩니다)" cmd /k "cd /d %ROOT%apps\web && npm run dev"
+start "화환앱-프론트엔드 (이 창을 닫으면 서버가 종료됩니다)" cmd /k "cd /d %REPO_ROOT%apps\web && npm run dev"
 
 echo.
 echo 서버가 완전히 뜰 때까지 10초 정도 기다린 후 브라우저를 엽니다...

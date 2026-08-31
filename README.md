@@ -23,12 +23,14 @@ docker-compose.yml   로컬 개발용 PostgreSQL
 
 ## 로컬 실행
 
-Windows에서는 아래 수동 단계 대신 [`run_local_test.bat`](./run_local_test.bat)을 더블클릭하면
-Git/Node.js가 없을 경우 자동 설치(winget, 최초 1회 관리자 권한 필요) → git 저장소면 최신
-커밋으로 자동 업데이트 → DB 기동 → 백엔드/프론트엔드 설치·마이그레이션·시드·실행 → 브라우저
-열기까지 한 번에 처리합니다. Docker는 필수가 아닙니다 — 설치돼 있으면 자동으로 로컬 DB
-컨테이너를 띄우고, 없으면 건너뛰고 `apps/api/.env`의 `DATABASE_URL`이 가리키는 PostgreSQL을
-그대로 사용합니다(Neon 등 무료 클라우드 PostgreSQL을 붙여도 됩니다).
+Windows에서는 저장소를 미리 clone하지 않고 [`run_local_test.bat`](./run_local_test.bat) 파일
+하나만 아무 폴더에 받아서 더블클릭해도 됩니다 — Git/Node.js가 없으면 자동 설치(winget, 최초
+1회 관리자 권한 필요) → 프로젝트 파일이 없으면 이 저장소를 옆에 자동으로 clone(GitHub 로그인
+필요할 수 있음) → git 저장소면 최신 커밋으로 자동 업데이트 → DB 기동 → 백엔드/프론트엔드
+설치·마이그레이션·시드·실행 → 브라우저 열기까지 한 번에 처리합니다. Docker는 필수가
+아닙니다 — 설치돼 있으면 자동으로 로컬 DB 컨테이너를 띄우고, 없으면 건너뛰고
+`apps/api/.env`의 `DATABASE_URL`이 가리키는 PostgreSQL을 그대로 사용합니다(Neon 등 무료
+클라우드 PostgreSQL을 붙여도 됩니다).
 
 ### 1. DB 기동
 
