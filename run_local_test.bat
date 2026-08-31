@@ -45,25 +45,40 @@ if "%MISSING%"=="1" (
 
 REM ---------- 0.5. 프로젝트 파일 확인/자동 다운로드 ----------
 REM 이 .bat 파일만 다른 폴더(바탕화면 등)로 복사해서 실행해도 동작하도록,
-REM 저장소가 없으면 이 폴더 밑에 "eunmin" 폴더로 자동으로 내려받는다.
+REM 저장소가 없으면 자동으로 내려받는다. 단, OneDrive로 동기화되는 폴더(바탕화면/
+REM 문서 등이 회사 정책으로 OneDrive에 연결된 경우 흔함) 안에서는 OneDrive가
+REM .git 내부 파일을 잠가 clone이 "Permission denied"로 실패하는 경우가 많아,
+REM 그럴 때는 사용자 프로필 바로 밑(OneDrive와 무관한 위치)에 내려받는다.
 set "REPO_URL=https://github.com/emjeon3122-lgtm/eunmin.git"
 set "REPO_BRANCH=claude/app-development-project-eun5fu"
 set "REPO_ROOT=%ROOT%"
+set "SAFE_BASE=%USERPROFILE%\"
 
 if not exist "%ROOT%apps\api" (
     if exist "%ROOT%eunmin\apps\api" (
         set "REPO_ROOT=%ROOT%eunmin\"
+    ) else if exist "%SAFE_BASE%eunmin\apps\api" (
+        set "REPO_ROOT=%SAFE_BASE%eunmin\"
     ) else (
+        set "CLONE_TARGET=%ROOT%eunmin"
+        echo %ROOT%| findstr /I "OneDrive" >nul
+        if not errorlevel 1 (
+            echo [안내] 현재 폴더가 OneDrive 동기화 폴더 안에 있어 git 작업이 자주
+            echo 실패합니다^(권한 오류^). 대신 "%SAFE_BASE%eunmin" 폴더에 내려받습니다.
+            set "CLONE_TARGET=%SAFE_BASE%eunmin"
+        )
+
         echo 프로젝트 파일이 없어 저장소를 내려받습니다^(최초 1회^)...
         echo GitHub 로그인 창이 뜨면 로그인해주세요.
-        git clone -b "%REPO_BRANCH%" "%REPO_URL%" "%ROOT%eunmin"
+        git clone -b "%REPO_BRANCH%" "%REPO_URL%" "!CLONE_TARGET!"
         if errorlevel 1 (
-            echo [오류] 저장소를 내려받지 못했습니다. 인터넷 연결이나 GitHub 로그인을
-            echo 확인한 뒤 다시 실행해주세요.
+            echo [오류] 저장소를 내려받지 못했습니다.
+            echo 인터넷 연결이나 GitHub 로그인을 확인한 뒤 다시 실행해주세요.
+            echo ^(계속 실패하면 OneDrive 동기화를 잠시 끄고 시도해보세요.^)
             pause
             exit /b 1
         )
-        set "REPO_ROOT=%ROOT%eunmin\"
+        set "REPO_ROOT=!CLONE_TARGET!\"
     )
 )
 
