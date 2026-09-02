@@ -171,6 +171,9 @@ export interface Paginated<T> {
 // 항상 빈 값을 반환하는 Mock 어댑터가 응답한다 (apps/api/src/invitation-parser).
 export interface ParsedInvitationFields {
   recipientName?: string;
+  // 주소 칸에 바로 넣지 않고 우편번호 검색 팝업의 검색어로 쓴다 — 읽어낸 주소가
+  // 틀리면 배송이 실패하므로 공식 주소로 한 번 확정받는다.
   deliveryAddress?: string;
+  deliveryDetail?: string;
   desiredArrivalAt?: string;
 }

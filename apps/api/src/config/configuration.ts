@@ -23,6 +23,13 @@ export interface AppConfig {
   };
   storageDriver: 'local';
   storageLocalDir: string;
+  // 청첩장/부고장 자동 채우기 — 'mock'이면 외부로 아무것도 보내지 않고 빈 결과를
+  // 반환한다(기본값). 'claude'로 바꾸면 Claude 비전 모델로 실제 추출을 수행한다.
+  invitationParser: 'mock' | 'claude';
+  anthropic: {
+    apiKey: string;
+    model: string;
+  };
 }
 
 export default (): { app: AppConfig } => ({
@@ -50,5 +57,10 @@ export default (): { app: AppConfig } => ({
     },
     storageDriver: (process.env.STORAGE_DRIVER as 'local') ?? 'local',
     storageLocalDir: process.env.STORAGE_LOCAL_DIR ?? './uploads',
+    invitationParser: (process.env.INVITATION_PARSER as 'mock' | 'claude') ?? 'mock',
+    anthropic: {
+      apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+      model: process.env.ANTHROPIC_MODEL ?? 'claude-opus-5',
+    },
   },
 });

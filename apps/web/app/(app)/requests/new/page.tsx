@@ -163,14 +163,21 @@ export default function NewWreathRequestPage() {
   }
 
   function handleParsed(fields: ParsedInvitationFields) {
+    // 이름·일시·상세주소는 자유 입력 칸이라 읽어낸 값을 그대로 채운다.
     if (fields.recipientName) setValue("recipientName", fields.recipientName, { shouldValidate: true });
-    if (fields.deliveryAddress) setValue("deliveryAddress", fields.deliveryAddress, { shouldValidate: true });
+    if (fields.deliveryDetail) setValue("deliveryDetail", fields.deliveryDetail, { shouldValidate: true });
     if (fields.desiredArrivalAt) setValue("desiredArrivalAt", fields.desiredArrivalAt.slice(0, 16), { shouldValidate: true });
+
+    // 배송주소만은 읽어낸 값을 그대로 쓰지 않는다. 주소가 틀리면 배송 자체가
+    // 실패하므로, 그 값을 검색어로 넣은 우편번호 팝업을 띄워 직원이 공식 주소를
+    // 클릭 한 번으로 확정하게 한다.
+    if (fields.deliveryAddress) openAddressSearch(fields.deliveryAddress);
   }
 
   // 카카오(다음) 우편번호 서비스 — 배송주소는 직접 타이핑 대신 도로명주소
   // 검색 팝업에서 골라 넣도록 한다. 상세주소(동/호수 등)는 별도 입력란에서 받는다.
-  function openAddressSearch() {
+  // initialQuery를 주면 그 주소로 이미 검색된 상태로 팝업이 열린다(자동 채우기 경로).
+  function openAddressSearch(initialQuery?: string) {
     const daum = (window as typeof window & { daum?: any }).daum;
     if (!daum?.Postcode) return;
     new daum.Postcode({
@@ -178,7 +185,7 @@ export default function NewWreathRequestPage() {
         const address = data.roadAddress || data.jibunAddress || data.address;
         setValue("deliveryAddress", address, { shouldValidate: true });
       },
-    }).open();
+    }).open(initialQuery ? { q: initialQuery } : undefined);
   }
 
   async function goNext() {
@@ -514,13 +521,13 @@ export default function NewWreathRequestPage() {
                   id="deliveryAddress"
                   readOnly
                   placeholder="주소 검색 버튼을 눌러주세요"
-                  onClick={openAddressSearch}
+                  onClick={() => openAddressSearch()}
                   {...register("deliveryAddress")}
                   className="w-full cursor-pointer bg-white"
                 />
                 <button
                   type="button"
-                  onClick={openAddressSearch}
+                  onClick={() => openAddressSearch()}
                   className="shrink-0 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   주소 검색
