@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  employeeNo   String   @unique @map("employee_no")
+  name         String
+  department   String
+  email        String   @unique
+  phone        String?
+  ssoSubjectId String   @unique @map("sso_subject_id")
+  role         String   @default("employee")
+  // 파트너(고위 직급) 여부 — false면 신청 시 파트너 승인 증빙 첨부가 필수다
+  // (기존 금액 기준 사전승인 규칙을 대체하는 새 게이팅 기준).
+  isPartner    Boolean  @default(false) @map("is_partner")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  wreathRequests     WreathRequest[] @relation("Requester")
+  cancelledRequests  WreathRequest[] @relation("CancelledBy")
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+model WreathRequest {
+  id                  String        @id @default(uuid())
+  requesterId         String        @map("requester_id")
+  requester           User          @relation("Requester", fields: [requesterId], references: [id])
+
+  requestType         String        @map("request_type")
+  occasionType        String        @map("occasion_type")
+  weddingSide         String?       @map("wedding_side") // occasionType=wedding일 때만 사용
+  orchidType          String?       @map("orchid_type")  // occasionType=opening/promotion일 때만 사용
+  recipientName       String        @map("recipient_name")
+  recipientPhone      String        @map("recipient_phone")
+  ordererPhone        String        @map("orderer_phone") // 신청자 본인 휴대폰(수령인 연락처와 별개)
+  deliveryAddress     String        @map("delivery_address")
+  deliveryDetail      String?       @map("delivery_detail")
+  desiredArrivalAt    DateTime      @map("desired_arrival_at")
+  ribbonMessage       String        @map("ribbon_message")
+  ribbonSenderText    String        @map("ribbon_sender_text")
+  declaredAmount      Int?          @map("declared_amount")
+
+  // Section 3 비용코드/발송사유 — requestType별로 쓰이는 필드가 다르다.
+  // existing_client(Case A): clientName/contractType/serviceName
+  // prospective_client(Case B) · self(Case C): sendReason + costCode
+  clientName          String?       @map("client_name")
+  contractType        String?       @map("contract_type")
+  serviceName         String?       @map("service_name")
+  sendReason          String?       @map("send_reason")
+  // 정산용 비용 코드 — 사내 DB/엑셀 추출에만 쓰이는 내부 전용 필드. 꽃집에게 보내는
+  // 알림톡 payload(vendor-adapter.interface.ts VendorMessagePayload)에는 절대 포함하지
+  // 않는다 (신규 요구사항 3장: 꽃집 전송 데이터에서 내부 정보 노출 금지).
+  costCode            String?       @map("cost_code")
+  memo                String?
+
+  // 파트너 승인 증빙 게이팅 — User.isPartner가 false인 신청자만 필요하다
+  // (기존 금액 기준 approval_rules 게이트를 대체; 그 테이블/관리 화면 자체는
+  // 남겨뒀지만 제출 시 더 이상 참조하지 않는다).
+  requiresPreApproval Boolean       @default(false) @map("requires_pre_approval")
+  attachmentId        String?       @unique @map("attachment_id")
+  attachment          Attachment?   @relation("PreApprovalAttachment", fields: [attachmentId], references: [id])
+
+  status              String        @default("draft")
+
+  vendorId            String?       @map("vendor_id")
+  vendor              Vendor?       @relation(fields: [vendorId], references: [id])
+  productId           String?       @map("product_id")
+  product             Product?      @relation(fields: [productId], references: [id])
+
+  vendorStatusToken   String?       @unique @map("vendor_status_token")
+  acceptedAt          DateTime?     @map("accepted_at")
+  completionPhotos    Attachment[]  @relation("CompletionPhotos")
+  completedAt         DateTime?     @map("completed_at")
+  adminOverrideNote   String?       @map("admin_override_note")
+
+  cancelledById       String?       @map("cancelled_by")
+  cancelledBy         User?         @relation("CancelledBy", fields: [cancelledById], references: [id])
+  cancelledReason     String?       @map("cancelled_reason")
+  cancelledAt         DateTime?     @map("cancelled_at")
+
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  transmissions       OrderTransmission[]
+  notifications       Notification[]
+
+  @@map("wreath_requests")
+}
+
+model Attachment {
+  id                  String         @id @default(uuid())
+  fileName            String         @map("file_name")
+  fileUrl             String         @map("file_url")
+  mimeType             String         @map("mime_type")
+  type                String
+  uploaderType        String         @map("uploader_type")
+  uploadedById        String?        @map("uploaded_by")
+  uploadedAt          DateTime       @default(now()) @map("uploaded_at")
+
+  // Completion photos are many-per-request (docs/02 upload-multiple-photos
+  // amendment); the pre-approval proof stays 1:1 via WreathRequest.attachmentId.
+  completionForId     String?        @map("completion_for_id")
+  completionFor       WreathRequest? @relation("CompletionPhotos", fields: [completionForId], references: [id])
+
+  preApprovalFor WreathRequest? @relation("PreApprovalAttachment")
+
+  @@map("attachments")
+}
+
+model ApprovalRule {
+  id           String             @id @default(uuid())
+  occasionType String             @map("occasion_type")
+  minAmount    Int                @map("min_amount")
+  isActive     Boolean            @default(true) @map("is_active")
+  description  String?
+
+  @@map("approval_rules")
+}
+
+model Vendor {
+  id                       String            @id @default(uuid())
+  name                     String
+  channelType              String            @map("channel_type")
+  contactPhone             String            @map("contact_phone")
+  kakaoChannelId           String?           @map("kakao_channel_id")
+  isChannelFriendConfirmed Boolean           @default(false) @map("is_channel_friend_confirmed")
+  fallbackChannel          String            @default("manual_admin_alert") @map("fallback_channel")
+  isActive                 Boolean           @default(true) @map("is_active")
+
+  products Product[]
+  requests WreathRequest[]
+
+  @@map("vendors")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  vendorId    String   @map("vendor_id")
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  name        String
+  price       Int
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+
+  requests WreathRequest[]
+
+  @@map("products")
+}
+
+model RibbonTemplate {
+  id           String       @id @default(uuid())
+  occasionType String       @map("occasion_type")
+  phraseKo     String       @map("phrase_ko")
+  phraseHanja  String?      @map("phrase_hanja")
+  isActive     Boolean      @default(true) @map("is_active")
+
+  @@map("ribbon_templates")
+}
+
+model OrderTransmission {
+  id                String               @id @default(uuid())
+  requestId         String               @map("request_id")
+  request           WreathRequest        @relation(fields: [requestId], references: [id])
+  channel           String
+  payload           String
+  status            String               @default("pending")
+  providerMessageId String?              @unique @map("provider_message_id")
+  responseBody      String?              @map("response_body")
+  attemptedAt       DateTime             @default(now()) @map("attempted_at")
+
+  @@map("order_transmissions")
+}
+
+model Notification {
+  id        String               @id @default(uuid())
+  userId    String               @map("user_id")
+  user      User                 @relation(fields: [userId], references: [id])
+  requestId String?              @map("request_id")
+  request   WreathRequest?       @relation(fields: [requestId], references: [id])
+  channel   String
+  message   String
+  status    String               @default("sent")
+  sentAt    DateTime             @default(now()) @map("sent_at")
+
+  @@map("notifications")
+}
