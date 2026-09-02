@@ -64,12 +64,24 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     }
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: payload,
-    cache,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: payload,
+      cache,
+    });
+  } catch {
+    // 서버에 아예 연결이 안 되면 fetch가 예외를 던진다(응답이 없으므로 아래 상태코드
+    // 분기까지 오지 않는다). 이 경우를 구분해두지 않으면 화면에서 "로그인 실패" 같은
+    // 입력값 문제로 오해되는 메시지가 뜬다 — 서버 기동 중이 대표적인 경우다.
+    throw new ApiError(
+      "NETWORK_ERROR",
+      "서버에 연결할 수 없습니다. 서버가 켜지는 중일 수 있으니 잠시 후 다시 시도해주세요.",
+      0,
+    );
+  }
 
   if (!res.ok) {
     const { code, message } = await parseErrorBody(res);
@@ -110,7 +122,16 @@ export async function apiDownload(path: string, fallbackFileName: string): Promi
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  } catch {
+    throw new ApiError(
+      "NETWORK_ERROR",
+      "서버에 연결할 수 없습니다. 서버가 켜지는 중일 수 있으니 잠시 후 다시 시도해주세요.",
+      0,
+    );
+  }
   if (!res.ok) {
     const { code, message } = await parseErrorBody(res);
     throw new ApiError(code, message, res.status);

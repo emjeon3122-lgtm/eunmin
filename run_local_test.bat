@@ -175,8 +175,13 @@ echo 프론트엔드 서버를 새 창에서 실행합니다^(http://localhost:3
 start "화환앱-프론트엔드 (이 창을 닫으면 서버가 종료됩니다)" cmd /k "cd /d %REPO_ROOT%apps\web && npm run dev"
 
 echo.
-echo 서버가 완전히 뜰 때까지 10초 정도 기다린 후 브라우저를 엽니다...
-timeout /t 10 /nobreak >nul
+REM 예전에는 10초만 기다리고 브라우저를 열었는데, 개발 모드 백엔드는 TypeScript를
+REM 컴파일하고 나서야 포트를 열기 때문에 컴퓨터가 느리면 10초로는 부족했다.
+REM 그 상태로 로그인을 누르면 서버가 없어서 실패하는데 화면에는 로그인 실패로만
+REM 보여 사번이 틀린 것으로 오해하게 된다 — 그래서 실제로 포트가 열릴 때까지 기다린다.
+echo 서버가 준비될 때까지 기다립니다^(처음에는 1분 이상 걸릴 수 있습니다^)...
+call :WaitForPort 4000 "백엔드"
+call :WaitForPort 3000 "프론트엔드"
 start "" "http://localhost:3000/login"
 
 echo.
@@ -224,3 +229,23 @@ for /f "skip=2 tokens=3*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Cont
 for /f "skip=2 tokens=3*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%A %%B"
 set "PATH=%SYS_PATH%;%USR_PATH%;%PATH%"
 exit /b 0
+
+:WaitForPort
+REM %1 = 포트번호, %2 = 화면에 보여줄 이름
+REM 서버가 그 포트를 열었는지 확인한다. 개발 서버는 준비가 끝난 뒤에야 포트를 열기 때문에
+REM 이 확인만으로 "이제 접속해도 된다"를 판단할 수 있다.
+set "WAIT_TRIES=0"
+:WaitForPortLoop
+powershell -NoProfile -Command "try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', %1); $c.Close(); exit 0 } catch { exit 1 }" >nul 2>nul
+if not errorlevel 1 (
+    echo   %~2 준비 완료.
+    exit /b 0
+)
+set /a WAIT_TRIES+=1
+if !WAIT_TRIES! GEQ 60 (
+    echo   [안내] %~2가 2분 안에 응답하지 않았습니다. 새로 열린 검은 창의
+    echo          오류 메시지를 확인해주세요.
+    exit /b 1
+)
+timeout /t 2 /nobreak >nul
+goto :WaitForPortLoop
