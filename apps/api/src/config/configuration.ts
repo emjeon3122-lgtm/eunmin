@@ -16,7 +16,9 @@ export interface AppConfig {
   vendorAdapter: 'mock' | 'kakao';
   kakao: {
     apiKey: string;
+    apiSecret: string;
     senderKey: string;
+    senderPhone: string;
     apiBaseUrl: string;
     templateId: string;
     webhookSecret: string;
@@ -50,8 +52,10 @@ export default (): { app: AppConfig } => ({
     vendorAdapter: (process.env.VENDOR_ADAPTER as 'mock' | 'kakao') ?? 'mock',
     kakao: {
       apiKey: process.env.KAKAO_CPAAS_API_KEY ?? '',
+      apiSecret: process.env.KAKAO_CPAAS_API_SECRET ?? '',
       senderKey: process.env.KAKAO_CPAAS_SENDER_KEY ?? '',
-      apiBaseUrl: process.env.KAKAO_CPAAS_API_BASE_URL ?? '',
+      senderPhone: process.env.KAKAO_CPAAS_SENDER_PHONE ?? '',
+      apiBaseUrl: process.env.KAKAO_CPAAS_API_BASE_URL ?? 'https://api.solapi.com',
       templateId: process.env.KAKAO_CPAAS_TEMPLATE_ID ?? '',
       webhookSecret: process.env.KAKAO_WEBHOOK_SECRET ?? 'change-me',
     },
