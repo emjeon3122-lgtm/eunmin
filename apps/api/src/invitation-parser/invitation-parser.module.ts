@@ -1,5 +1,6 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AttachmentsModule } from '../attachments/attachments.module';
 import { AuthModule } from '../auth/auth.module';
 import { AppConfig } from '../config/configuration';
 import { InvitationParserController } from './invitation-parser.controller';
@@ -13,7 +14,7 @@ import { INVITATION_PARSER, InvitationParserAdapter } from './invitation-parser.
 // 외부로 전송하려면 사내 검토가 필요하다. INVITATION_PARSER=claude 로 명시적으로
 // 켜기 전까지는 아무것도 외부로 나가지 않는다.
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, AttachmentsModule],
   controllers: [InvitationParserController],
   providers: [
     MockInvitationParserAdapter,

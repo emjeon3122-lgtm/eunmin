@@ -125,6 +125,7 @@ export default function NewWreathRequestPage() {
   const [user, setUser] = useState<User | null>(null);
   const [step, setStep] = useState(1);
   const [proofAttachmentId, setProofAttachmentId] = useState<string | null>(null);
+  const [invitationAttachmentIds, setInvitationAttachmentIds] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -278,6 +279,7 @@ export default function NewWreathRequestPage() {
         costCode: values.costCode,
         memo: values.memo || undefined,
         invitationUrl: values.invitationUrl || undefined,
+        invitationAttachmentIds: invitationAttachmentIds.length ? invitationAttachmentIds : undefined,
         attachmentId: proofAttachmentId,
       });
       router.push(`/requests/${res.data.id}`);
@@ -502,6 +504,7 @@ export default function NewWreathRequestPage() {
             <InvitationParserBox
               onParsed={handleParsed}
               onUrlChange={(url) => setValue("invitationUrl", url)}
+              onPhotosUploaded={setInvitationAttachmentIds}
             />
             <p className="rounded-md bg-red-50 p-3 text-xs font-medium text-red-700">
               ⚠ 배송정보 오입력 시, 책임지지 않습니다. 신중하게 입력해주세요.

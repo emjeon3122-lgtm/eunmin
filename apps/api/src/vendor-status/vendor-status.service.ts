@@ -19,12 +19,20 @@ export class VendorStatusService {
 
   async getStatus(token: string) {
     const request = await this.loadByToken(token);
+    // 청첩장/부고장 원본은 꽃집이 배송 정보를 대조하는 용도로만 함께 내려준다.
+    // 사진은 알림톡 본문에 실을 수 없어 이 페이지에서만 볼 수 있다.
+    const invitationPhotos = await this.prisma.attachment.findMany({
+      where: { invitationForId: request.id },
+      orderBy: { uploadedAt: 'asc' },
+    });
     return {
       occasionType: request.occasionType,
       desiredArrivalAt: request.desiredArrivalAt,
       ribbonMessage: request.ribbonMessage,
       status: request.status,
       nextAction: this.nextActionFor(request.status),
+      invitationUrl: request.invitationUrl,
+      invitationPhotoUrls: invitationPhotos.map((p) => p.fileUrl),
     };
   }
 

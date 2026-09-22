@@ -68,6 +68,9 @@ export interface WreathRequestDetail {
   memo?: string | null;
   // 신청자가 입력한 모바일 청첩장/부고장 링크 — 꽃집에도 알림톡으로 함께 전달된다.
   invitationUrl?: string | null;
+  // 자동 채우기에 쓴 청첩장/부고장 사진 — 알림톡에는 실을 수 없어 꽃집 상태 확인
+  // 페이지와 관리자 화면에서만 보인다.
+  invitationPhotoUrls?: string[];
   clientName?: string | null;
   contractType?: ContractType | null;
   serviceName?: string | null;
@@ -162,6 +165,9 @@ export interface VendorStatusData {
   ribbonMessage: string;
   status: WreathStatus;
   nextAction: VendorNextAction;
+  // 배송 정보 대조용 청첩장/부고장 원본 (신청 시 선택 입력이라 없을 수 있다).
+  invitationUrl?: string | null;
+  invitationPhotoUrls?: string[];
 }
 
 export interface Paginated<T> {

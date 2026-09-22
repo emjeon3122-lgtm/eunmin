@@ -9,7 +9,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthenticatedUser } from '../auth/jwt.types';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PHOTO_UPLOAD_OPTIONS } from '../common/file-validation';
 import { ParseInvitationDto } from './dto/parse-invitation.dto';
 import { INVITATION_PARSER, InvitationParserAdapter, ParsedInvitationFields } from './invitation-parser.interface';
@@ -22,26 +25,37 @@ const MAX_INVITATION_IMAGES = 2;
 @Controller('invitation-parser')
 @UseGuards(JwtAuthGuard)
 export class InvitationParserController {
-  constructor(@Inject(INVITATION_PARSER) private readonly parser: InvitationParserAdapter) {}
+  constructor(
+    @Inject(INVITATION_PARSER) private readonly parser: InvitationParserAdapter,
+    private readonly attachmentsService: AttachmentsService,
+  ) {}
 
   @Post('parse')
   @UseInterceptors(FilesInterceptor('images', MAX_INVITATION_IMAGES, PHOTO_UPLOAD_OPTIONS))
   async parse(
     @Body() dto: ParseInvitationDto,
     @UploadedFiles() images: Express.Multer.File[] = [],
-  ): Promise<{ data: ParsedInvitationFields; matched: boolean }> {
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<{ data: ParsedInvitationFields; matched: boolean; attachmentIds: string[] }> {
     if (!dto.url && images.length === 0) {
       throw new BadRequestException('청첩장/부고장 URL 또는 이미지를 1장 이상 첨부해주세요.');
     }
 
     // 이미지가 있으면 이미지(OCR) 결과를 우선하고, URL 결과로 빈 필드만 보충한다.
-    const [urlResult, imageResult] = await Promise.all([
+    // 사진은 파싱과 동시에 저장해 둔다 — 제출 시 신청서에 연결해 꽃집이 원본과
+    // 대조할 수 있게 하기 위함이며, 같은 파일을 두 번 올리지 않으려고 여기서 처리한다.
+    const [urlResult, imageResult, attachments] = await Promise.all([
       dto.url ? this.parser.parseUrl(dto.url) : Promise.resolve<ParsedInvitationFields>({}),
       images.length > 0 ? this.parser.parseImages(images) : Promise.resolve<ParsedInvitationFields>({}),
+      Promise.all(
+        images.map((image) =>
+          this.attachmentsService.upload(image, 'invitation_photo', 'employee', user.id),
+        ),
+      ),
     ]);
     const merged: ParsedInvitationFields = { ...urlResult, ...imageResult };
     const matched = Object.values(merged).some((v) => v !== undefined && v !== '');
 
-    return { data: merged, matched };
+    return { data: merged, matched, attachmentIds: attachments.map((a) => a.id) };
   }
 }

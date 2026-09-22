@@ -13,11 +13,15 @@ const MAX_IMAGES = 2;
 export function InvitationParserBox({
   onParsed,
   onUrlChange,
+  onPhotosUploaded,
 }: {
   onParsed: (fields: ParsedInvitationFields) => void;
   // 입력된 링크는 자동 채우기에만 쓰고 끝내지 않고 신청서와 함께 저장된다 — 꽃집이
   // 알림톡으로 같은 링크를 받아 배송 정보를 원본과 대조할 수 있게 하기 위함이다.
   onUrlChange: (url: string) => void;
+  // 사진은 분석과 동시에 서버에 저장되고, 여기서 받은 id를 제출 시 같이 보내
+  // 신청서에 연결한다(꽃집 상태 확인 페이지에서 원본으로 보여준다).
+  onPhotosUploaded: (attachmentIds: string[]) => void;
 }) {
   const [url, setUrl] = useState("");
   const [images, setImages] = useState<File[]>([]);
@@ -35,10 +39,12 @@ export function InvitationParserBox({
       const formData = new FormData();
       if (url) formData.append("url", url);
       images.forEach((img) => formData.append("images", img));
-      const res = await apiPostForm<{ data: ParsedInvitationFields; matched: boolean }>(
-        "/invitation-parser/parse",
-        formData
-      );
+      const res = await apiPostForm<{
+        data: ParsedInvitationFields;
+        matched: boolean;
+        attachmentIds: string[];
+      }>("/invitation-parser/parse", formData);
+      onPhotosUploaded(res.attachmentIds);
       if (res.matched) {
         onParsed(res.data);
         setMessage("자동으로 채웠습니다. 아래 내용을 확인해주세요.");

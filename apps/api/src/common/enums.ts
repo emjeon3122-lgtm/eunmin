@@ -84,6 +84,9 @@ export type RequestStatus = (typeof RequestStatus)[keyof typeof RequestStatus];
 export const AttachmentType = {
   pre_approval_proof: 'pre_approval_proof',
   delivery_completion_photo: 'delivery_completion_photo',
+  // 자동 채우기에 쓴 청첩장/부고장 사진 — 꽃집이 배송 정보를 원본과 대조할 수 있게
+  // 보관한다(알림톡 본문에는 이미지를 실을 수 없어 상태 확인 페이지에서 보여준다).
+  invitation_photo: 'invitation_photo',
 } as const;
 export type AttachmentType = (typeof AttachmentType)[keyof typeof AttachmentType];
 

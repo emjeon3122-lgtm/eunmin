@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsInt,
@@ -80,6 +82,14 @@ export class CreateWreathRequestDto {
   @IsOptional()
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   invitationUrl?: string;
+
+  // 자동 채우기에 쓴 청첩장/부고장 사진(POST /api/invitation-parser/parse가 돌려준 id).
+  // 신청자 본인이 올린 청첩장 사진만 연결된다 — 검증은 서비스에서 한다.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(2)
+  @IsUUID('all', { each: true })
+  invitationAttachmentIds?: string[];
 
   // Section 3 — Case A(existing_client)에서만 쓰임.
   @IsOptional()

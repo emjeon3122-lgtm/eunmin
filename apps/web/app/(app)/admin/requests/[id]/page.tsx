@@ -144,6 +144,26 @@ export default function AdminWreathRequestDetailPage() {
         {request.adminOverrideNote && <Row label="관리자 수동 처리 메모" value={request.adminOverrideNote} />}
       </dl>
 
+      {request.invitationPhotoUrls && request.invitationPhotoUrls.length > 0 && (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold text-gray-900">
+            청첩장/부고장 사진 ({request.invitationPhotoUrls.length}장)
+          </h2>
+          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {request.invitationPhotoUrls.map((url, i) => (
+              <a key={url} href={resolveFileUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={resolveFileUrl(url) ?? undefined}
+                  alt={`청첩장/부고장 ${i + 1}`}
+                  className="w-full rounded-md border border-gray-200"
+                />
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="mt-6">
         <h2 className="text-sm font-semibold text-gray-900">알림톡 발송 로그</h2>
         <div className="mt-2 overflow-x-auto rounded-lg border border-gray-200 bg-white">

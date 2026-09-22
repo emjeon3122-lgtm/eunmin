@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { apiGet, apiPost, apiPostForm, ApiError } from "@/lib/api";
+import { apiGet, apiPost, apiPostForm, ApiError, resolveFileUrl } from "@/lib/api";
 import { OCCASION_TYPE_LABELS } from "@/lib/labels";
 import { formatDateTime } from "@/lib/labels";
 import type { VendorStatusData } from "@/lib/types";
@@ -113,6 +113,31 @@ export default function VendorStatusPage() {
           <InfoRow label="도착 희망" value={formatDateTime(data.desiredArrivalAt)} />
           <InfoRow label="리본 문구" value={data.ribbonMessage} />
         </dl>
+
+        {(data.invitationUrl || data.invitationPhotoUrls?.length) && (
+          <div className="mt-5 space-y-2">
+            <p className="text-sm text-gray-500">청첩장/부고장 원본</p>
+            {data.invitationUrl && (
+              <a
+                href={data.invitationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block truncate text-base text-brand-600 underline"
+              >
+                {data.invitationUrl}
+              </a>
+            )}
+            {data.invitationPhotoUrls?.map((url) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={url}
+                src={resolveFileUrl(url) ?? ""}
+                alt="청첩장/부고장"
+                className="w-full rounded-md border border-gray-200"
+              />
+            ))}
+          </div>
+        )}
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 

@@ -83,6 +83,21 @@ export class WreathRequestsService {
       },
     });
 
+    // 청첩장 사진은 자동 채우기 단계에서 이미 저장돼 있으므로 신청서에 연결만 한다.
+    // where 조건으로 "본인이 올린, 아직 어느 신청에도 붙지 않은 청첩장 사진"만
+    // 걸러내 — 남의 첨부나 승인 증빙 id를 넣어도 아무것도 연결되지 않는다.
+    if (dto.invitationAttachmentIds?.length) {
+      await this.prisma.attachment.updateMany({
+        where: {
+          id: { in: dto.invitationAttachmentIds },
+          type: 'invitation_photo',
+          uploadedById: requesterId,
+          invitationForId: null,
+        },
+        data: { invitationForId: request.id },
+      });
+    }
+
     // 커밋 후 비동기로 발송 트리거 — 응답을 막지 않는다. 실패해도 프로세스가
     // 죽지 않도록 반드시 여기서 catch한다 (unhandled rejection 방지).
     this.sendToVendorService.handle(request.id).catch((err) => {
@@ -156,13 +171,17 @@ export class WreathRequestsService {
   // Shared shape builder for GET /api/wreath-requests/{id} (doc 02 section 3-4)
   // reused by the admin detail view too.
   async toDetail(request: { id: string; [key: string]: any }) {
-    const [latestTransmission, completionPhotos] = await Promise.all([
+    const [latestTransmission, completionPhotos, invitationPhotos] = await Promise.all([
       this.prisma.orderTransmission.findFirst({
         where: { requestId: request.id },
         orderBy: { attemptedAt: 'desc' },
       }),
       this.prisma.attachment.findMany({
         where: { completionForId: request.id },
+        orderBy: { uploadedAt: 'asc' },
+      }),
+      this.prisma.attachment.findMany({
+        where: { invitationForId: request.id },
         orderBy: { uploadedAt: 'asc' },
       }),
     ]);
@@ -197,6 +216,7 @@ export class WreathRequestsService {
       acceptedAt: request.acceptedAt,
       completedAt: request.completedAt,
       completionPhotoUrls: completionPhotos.map((p) => p.fileUrl),
+      invitationPhotoUrls: invitationPhotos.map((p) => p.fileUrl),
       adminOverrideNote: request.adminOverrideNote,
       cancelledReason: request.cancelledReason,
       cancelledAt: request.cancelledAt,
