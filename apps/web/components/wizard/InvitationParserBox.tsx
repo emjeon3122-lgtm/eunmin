@@ -64,8 +64,8 @@ export function InvitationParserBox({
     <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
       <p className="text-sm font-medium text-gray-800">📎 청첩장/부고장 첨부 (선택)</p>
       <p className="mt-1 text-xs text-gray-600">
-        아래 주문 정보를 자동으로 채워보고, 첨부한 링크·사진은 <b>꽃집에도 함께 전달</b>되어 배송
-        정보를 원본과 대조하는 데 쓰입니다. 사진은 <b>아래 버튼을 눌러야</b> 첨부됩니다.
+        아래 주문 정보를 자동으로 채워보고, 첨부한 링크·사진은 <b>꽃집에도 함께 전달</b>됩니다.
+        사진은 <b>아래 버튼을 눌러야</b> 첨부됩니다.
       </p>
       <div className="mt-2 space-y-2">
         <input
