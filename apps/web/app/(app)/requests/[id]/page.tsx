@@ -96,6 +96,7 @@ export default function WreathRequestDetailPage() {
         {request.sendReason && <Row label="발송 사유" value={request.sendReason} />}
         {request.costCode && <Row label="비용 코드" value={request.costCode} />}
         {request.memo && <Row label="기타요청사항" value={request.memo} />}
+        {request.invitationUrl && <Row label="청첩장/부고장 링크" value={request.invitationUrl} />}
       </dl>
 
       {(request.status === "submitted" || request.status === "submitted_to_vendor") && (

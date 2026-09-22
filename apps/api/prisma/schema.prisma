@@ -46,6 +46,9 @@ model WreathRequest {
   ribbonMessage       String        @map("ribbon_message")
   ribbonSenderText    String        @map("ribbon_sender_text")
   declaredAmount      Int?          @map("declared_amount")
+  // 모바일 청첩장/부고장 링크 — 자동 채우기의 입력이자, 꽃집이 신청자가 입력한
+  // 배송 정보를 원본과 대조할 수 있도록 알림톡에 함께 전달한다.
+  invitationUrl       String?       @map("invitation_url")
 
   // Section 3 비용코드/발송사유 — requestType별로 쓰이는 필드가 다르다.
   // existing_client(Case A): clientName/contractType/serviceName

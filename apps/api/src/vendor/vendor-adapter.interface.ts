@@ -15,6 +15,9 @@ export interface VendorMessagePayload {
   ribbonMessage: string;
   ribbonSenderText: string;
   memo?: string | null; // 기타요청사항 — occasionType=etc일 때 원하는 상품을 여기 적는다
+  // 신청자가 입력한 모바일 청첩장/부고장 링크 — 꽃집이 배송 정보를 원본과 대조할 수
+  // 있게 함께 보낸다. 신청 시 선택 입력이라 없을 수 있다.
+  invitationUrl?: string | null;
   statusLinkUrl: string; // https://app.bdo.kr/vendor/status/{token}
 }
 

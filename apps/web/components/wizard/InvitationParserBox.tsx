@@ -10,7 +10,15 @@ const MAX_IMAGES = 2;
 // 정보 입력란을 자동으로 채워보는 선택 기능. 실제 OCR/URL 파싱 서비스가 아직
 // 없어 지금은 항상 "자동으로 채우지 못했습니다"로 끝나지만, 입력 자체는 신청을
 // 막지 않으므로 구조만 미리 갖춰둔다.
-export function InvitationParserBox({ onParsed }: { onParsed: (fields: ParsedInvitationFields) => void }) {
+export function InvitationParserBox({
+  onParsed,
+  onUrlChange,
+}: {
+  onParsed: (fields: ParsedInvitationFields) => void;
+  // 입력된 링크는 자동 채우기에만 쓰고 끝내지 않고 신청서와 함께 저장된다 — 꽃집이
+  // 알림톡으로 같은 링크를 받아 배송 정보를 원본과 대조할 수 있게 하기 위함이다.
+  onUrlChange: (url: string) => void;
+}) {
   const [url, setUrl] = useState("");
   const [images, setImages] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,7 +62,10 @@ export function InvitationParserBox({ onParsed }: { onParsed: (fields: ParsedInv
           type="url"
           placeholder="모바일 청첩장/부고장 URL"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            onUrlChange(e.target.value);
+          }}
           className="w-full"
         />
         <input

@@ -14,7 +14,8 @@ export class MockVendorAdapter implements VendorAdapter {
         `수령인=${payload.recipientName}(${payload.recipientPhone}) 주문자=${payload.ordererPhone} ` +
         `배송지="${payload.deliveryAddress} ${payload.deliveryDetail ?? ''}" ` +
         `도착희망=${payload.desiredArrivalAt} 리본="${payload.ribbonMessage} / ${payload.ribbonSenderText}" ` +
-        `기타요청="${payload.memo ?? ''}" 링크=${payload.statusLinkUrl}`,
+        `기타요청="${payload.memo ?? ''}" 청첩장=${payload.invitationUrl ?? ''} ` +
+        `링크=${payload.statusLinkUrl}`,
     );
     return { providerMessageId: `mock-${randomUUID()}` };
   }

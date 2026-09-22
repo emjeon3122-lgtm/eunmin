@@ -66,6 +66,8 @@ export interface WreathRequestDetail {
   ribbonSenderText: string;
   declaredAmount?: number | null;
   memo?: string | null;
+  // 신청자가 입력한 모바일 청첩장/부고장 링크 — 꽃집에도 알림톡으로 함께 전달된다.
+  invitationUrl?: string | null;
   clientName?: string | null;
   contractType?: ContractType | null;
   serviceName?: string | null;

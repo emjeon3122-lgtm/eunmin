@@ -139,6 +139,7 @@ export default function AdminWreathRequestDetailPage() {
           />
         )}
         {request.memo && <Row label="메모" value={request.memo} />}
+        {request.invitationUrl && <Row label="청첩장/부고장 링크" value={request.invitationUrl} />}
         {request.cancelledReason && <Row label="취소 사유" value={request.cancelledReason} />}
         {request.adminOverrideNote && <Row label="관리자 수동 처리 메모" value={request.adminOverrideNote} />}
       </dl>

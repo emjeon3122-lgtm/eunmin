@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   Min,
   MinLength,
@@ -73,6 +74,12 @@ export class CreateWreathRequestDto {
   @IsOptional()
   @IsString()
   memo?: string;
+
+  // 모바일 청첩장/부고장 링크 — 꽃집에게 그대로 전달되고 상세 화면에서 링크로
+  // 렌더링되므로, javascript: 같은 스킴이 섞이지 않도록 http/https만 허용한다.
+  @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  invitationUrl?: string;
 
   // Section 3 — Case A(existing_client)에서만 쓰임.
   @IsOptional()

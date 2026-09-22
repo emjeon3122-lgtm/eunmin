@@ -61,6 +61,7 @@ export class SendToVendorService {
         ribbonMessage: request.ribbonMessage,
         ribbonSenderText: request.ribbonSenderText,
         memo: request.memo,
+        invitationUrl: request.invitationUrl,
         statusLinkUrl,
       });
 

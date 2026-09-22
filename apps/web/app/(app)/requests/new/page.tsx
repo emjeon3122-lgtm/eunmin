@@ -62,6 +62,7 @@ const schema = z
     ribbonSenderText: z.string().min(1, "보내는 이를 입력해주세요."),
     ordererPhone: z.string().min(9, "주문자 휴대폰 번호를 입력해주세요."),
     memo: z.string().optional(),
+    invitationUrl: z.string().optional(),
   })
   .superRefine((values, ctx) => {
     if ((values.occasionType === "opening" || values.occasionType === "promotion") && !values.orchidType) {
@@ -276,6 +277,7 @@ export default function NewWreathRequestPage() {
         sendReason: values.sendReason,
         costCode: values.costCode,
         memo: values.memo || undefined,
+        invitationUrl: values.invitationUrl || undefined,
         attachmentId: proofAttachmentId,
       });
       router.push(`/requests/${res.data.id}`);
@@ -497,7 +499,10 @@ export default function NewWreathRequestPage() {
         {step === 4 && (
           <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
             <h2 className="text-sm font-semibold text-gray-900">4. 주문 정보 입력</h2>
-            <InvitationParserBox onParsed={handleParsed} />
+            <InvitationParserBox
+              onParsed={handleParsed}
+              onUrlChange={(url) => setValue("invitationUrl", url)}
+            />
             <p className="rounded-md bg-red-50 p-3 text-xs font-medium text-red-700">
               ⚠ 배송정보 오입력 시, 책임지지 않습니다. 신중하게 입력해주세요.
             </p>
@@ -651,6 +656,7 @@ export default function NewWreathRequestPage() {
               <SummaryRow label="리본" value={`${values.ribbonMessage} / ${values.ribbonSenderText}`} />
               <SummaryRow label="주문자 연락처" value={values.ordererPhone} />
               {values.memo && <SummaryRow label="기타요청사항" value={values.memo} />}
+              {values.invitationUrl && <SummaryRow label="청첩장/부고장 링크" value={values.invitationUrl} />}
               {!user.isPartner && (
                 <SummaryRow label="파트너 승인 증빙" value={proofAttachmentId ? "첨부됨 ✓" : "미첨부"} />
               )}

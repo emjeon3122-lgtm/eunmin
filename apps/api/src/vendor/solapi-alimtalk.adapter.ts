@@ -75,6 +75,7 @@ export class SolapiAlimtalkAdapter implements VendorAdapter {
               '#{ribbonMessage}': payload.ribbonMessage,
               '#{ribbonSenderText}': payload.ribbonSenderText,
               '#{memo}': payload.memo ?? '',
+              '#{invitationUrl}': payload.invitationUrl ?? '',
               // 버튼 링크는 템플릿에 "https://#{url}" 형태로 등록했다 — 카카오는 링크를
               // 변수로 둘 때 프로토콜을 템플릿 쪽에 고정하도록 요구하므로, 여기서는
               // 프로토콜을 뗀 나머지(도메인+경로)만 넘긴다.
