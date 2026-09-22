@@ -45,11 +45,13 @@ export function InvitationParserBox({
         attachmentIds: string[];
       }>("/invitation-parser/parse", formData);
       onPhotosUploaded(res.attachmentIds);
+      const attached =
+        res.attachmentIds.length > 0 ? ` 사진 ${res.attachmentIds.length}장은 꽃집에 함께 전달됩니다.` : "";
       if (res.matched) {
         onParsed(res.data);
-        setMessage("자동으로 채웠습니다. 아래 내용을 확인해주세요.");
+        setMessage(`자동으로 채웠습니다. 아래 내용을 확인해주세요.${attached}`);
       } else {
-        setMessage("자동으로 채우지 못했습니다. 아래 항목을 직접 입력해주세요.");
+        setMessage(`자동으로 채우지 못했습니다. 아래 항목을 직접 입력해주세요.${attached}`);
       }
     } catch (err) {
       setMessage(err instanceof ApiError ? err.message : "처리 중 오류가 발생했습니다.");
@@ -60,8 +62,10 @@ export function InvitationParserBox({
 
   return (
     <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
-      <p className="text-sm font-medium text-gray-800">
-        📎 청첩장/부고장 URL 또는 이미지로 자동 채우기 (선택)
+      <p className="text-sm font-medium text-gray-800">📎 청첩장/부고장 첨부 (선택)</p>
+      <p className="mt-1 text-xs text-gray-600">
+        아래 주문 정보를 자동으로 채워보고, 첨부한 링크·사진은 <b>꽃집에도 함께 전달</b>되어 배송
+        정보를 원본과 대조하는 데 쓰입니다. 사진은 <b>아래 버튼을 눌러야</b> 첨부됩니다.
       </p>
       <div className="mt-2 space-y-2">
         <input
@@ -91,7 +95,7 @@ export function InvitationParserBox({
           disabled={loading}
           className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
         >
-          {loading ? "분석 중..." : "자동 채우기 시도"}
+          {loading ? "분석 중..." : "첨부하고 자동 채우기"}
         </button>
         {message && <p className="text-xs text-gray-600">{message}</p>}
       </div>
