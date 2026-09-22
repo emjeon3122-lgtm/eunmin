@@ -75,8 +75,13 @@ export class SolapiAlimtalkAdapter implements VendorAdapter {
               '#{ribbonMessage}': payload.ribbonMessage,
               '#{ribbonSenderText}': payload.ribbonSenderText,
               '#{memo}': payload.memo ?? '',
+              // 버튼 링크는 템플릿에 "https://#{url}" 형태로 등록했다 — 카카오는 링크를
+              // 변수로 둘 때 프로토콜을 템플릿 쪽에 고정하도록 요구하므로, 여기서는
+              // 프로토콜을 뗀 나머지(도메인+경로)만 넘긴다.
+              '#{url}': payload.statusLinkUrl.replace(/^https?:\/\//, ''),
             },
-            buttons: [{ name: '주문 확인하기', type: 'WL', url: payload.statusLinkUrl }],
+            // 버튼 자체(이름/종류)는 사전 심사된 템플릿에 이미 정의돼 있으므로 발송 시
+            // 다시 보내지 않는다 — 템플릿과 어긋나면 발송이 거부된다.
             disableSms: false, // 알림톡 실패 시 자동 SMS 대체발송 (알림톡을 선택한 핵심 이유)
           },
         },
