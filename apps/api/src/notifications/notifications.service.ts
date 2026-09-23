@@ -15,6 +15,33 @@ export class NotificationsService {
     });
   }
 
+  // 아래 조회/읽음 처리는 전부 userId로 범위를 좁힌다 — 다른 사람 알림은 보이지도,
+  // 읽음 처리되지도 않는다.
+  async listForUser(userId: string, limit: number) {
+    const [items, unreadCount] = await Promise.all([
+      this.prisma.notification.findMany({
+        where: { userId },
+        orderBy: { sentAt: 'desc' },
+        take: limit,
+        select: { id: true, requestId: true, message: true, sentAt: true, readAt: true },
+      }),
+      this.countUnread(userId),
+    ]);
+    return { items, unreadCount };
+  }
+
+  countUnread(userId: string): Promise<number> {
+    return this.prisma.notification.count({ where: { userId, readAt: null } });
+  }
+
+  async markAllRead(userId: string): Promise<number> {
+    const { count } = await this.prisma.notification.updateMany({
+      where: { userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return count;
+  }
+
   // "Admin" alerts have no dedicated admin-user routing rule yet, so fan out to
   // every admin as an in-app Notification row — see docs/01 section 3-4 (unconfirmed).
   async notifyAdmins(requestId: string | null, message: string): Promise<void> {

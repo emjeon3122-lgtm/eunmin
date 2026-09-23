@@ -170,6 +170,14 @@ export interface VendorStatusData {
   invitationPhotoUrls?: string[];
 }
 
+export interface AppNotification {
+  id: string;
+  requestId: string | null;
+  message: string;
+  sentAt: string;
+  readAt: string | null;
+}
+
 export interface Paginated<T> {
   data: T[];
   meta: { total: number; page: number; size: number };

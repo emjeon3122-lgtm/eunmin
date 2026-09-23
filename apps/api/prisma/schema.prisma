@@ -197,6 +197,9 @@ model Notification {
   message   String
   status    String               @default("sent")
   sentAt    DateTime             @default(now()) @map("sent_at")
+  // 직원 화면의 안 읽은 알림 배지용 — null이면 아직 확인하지 않은 알림.
+  readAt    DateTime?            @map("read_at")
 
+  @@index([userId, readAt])
   @@map("notifications")
 }

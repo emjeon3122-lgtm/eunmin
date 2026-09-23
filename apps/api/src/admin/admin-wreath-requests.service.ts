@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WreathRequestsService } from '../wreath-requests/wreath-requests.service';
 import { InvalidStatusTransitionException, NotFoundApiException } from '../common/exceptions/api.exception';
+import { statusLabel } from '../common/status-label';
 import { ListAdminWreathRequestsQueryDto } from './dto/list-admin-wreath-requests.dto';
 import { DeliveryStatusDto } from './dto/delivery-status.dto';
 
@@ -159,7 +160,7 @@ export class AdminWreathRequestsService {
     await this.notificationsService.notifyRequester(
       updated.requesterId,
       updated.id,
-      `관리자가 상태를 '${dto.status}'로 수동 변경했습니다.`,
+      `관리자가 상태를 '${statusLabel(dto.status)}'(으)로 변경했습니다.`,
     );
     return { id: updated.id, status: updated.status, completedAt: updated.completedAt };
   }

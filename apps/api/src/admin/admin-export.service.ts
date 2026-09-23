@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import { Prisma } from '@prisma/client';
-import { RequestStatus } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { occasionLabel } from '../common/occasion-label';
+import { statusLabel } from '../common/status-label';
 import { ExportQueryDto } from './dto/export-query.dto';
 
 const REQUEST_TYPE_LABEL: Record<string, string> = {
@@ -19,15 +19,6 @@ const CONTRACT_TYPE_LABEL: Record<string, string> = {
   bookkeeping: '기장',
   internal_accounting: '내부회계',
   other_advisory: '기타 자문',
-};
-
-const STATUS_LABEL: Record<RequestStatus, string> = {
-  draft: '임시저장',
-  submitted: '제출됨',
-  submitted_to_vendor: '꽃집전달',
-  accepted: '접수됨',
-  completed: '완료',
-  cancelled: '취소',
 };
 
 @Injectable()
@@ -111,7 +102,7 @@ export class AdminExportService {
         sendReason: r.sendReason ?? '',
         costCode: r.costCode ?? '',
         requiresPreApproval: r.requiresPreApproval ? 'Y' : 'N',
-        status: STATUS_LABEL[r.status] ?? r.status,
+        status: statusLabel(r.status),
         completedAt: r.completedAt ? formatDate(r.completedAt) : '',
         completionPhotoUrls: r.completionPhotos.map((p) => p.fileUrl).join(', '),
       });
