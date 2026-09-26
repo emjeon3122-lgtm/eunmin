@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.next/
+*.log
+.env
+.env.local
+.DS_Store
+apps/api/uploads/
+apps/api/generated/
+*.db
+*.db-journal
+.env.bak
