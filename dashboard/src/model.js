@@ -338,6 +338,47 @@ const Model = (() => {
       return { ok: true, rows, prevMonth: before(m) };
     }
 
+    // 전년 동월 대비: 작년 같은 달 ERP 원본이 있으면 중분류·고객별로 비교한다.
+    // 계약번호는 해마다 새로 매겨지므로 고객(회사명) 기준으로 묶는다. 작년 자료에도 현재 본부매핑을 적용한다.
+    const clientKey = (name) => norm(name).replace(/\(주\)|㈜|주식회사|\(유\)|유한회사/g, '') || '(회사명 없음)';
+    function yoyRows(m) {
+      const d = contracts.get(m);
+      if (!d) return null;
+      const rows = d.rows.map((r) => ({ 본부: buOf(r.사업부), 사업부: r.사업부, 회사명: r.회사명, 중분류: catOf(r.계약구분), 계약: r.계약 / U, 매출: r.매출 / U }));
+      cfg.gijang.filter((g) => g.month === m).forEach((g) => rows.push({ 본부: buOf(g.사업부), 사업부: g.사업부, 회사명: '(기장 수기분)', 중분류: catOf(g.계약구분), 계약: g.계약 / U, 매출: g.매출 / U }));
+      return rows;
+    }
+    function yoyDetail(m) {
+      const pm = addMonths(m, -12);
+      const cur = yoyRows(m);
+      if (!cur) return { ok: false, prevMonth: pm, why: `${monthLabel(m)} 자료가 없습니다.` };
+      const prv = yoyRows(pm);
+      if (!prv) return { ok: false, prevMonth: pm, why: `작년 같은 달(${monthLabel(pm)}) ERP 파일을 함께 올리면 중분류·고객별로 어디서 차이가 났는지 볼 수 있습니다.` };
+      return { ok: true, prevMonth: pm, cur, prv };
+    }
+    // 두 해의 행을 key 별로 묶어 비교한다. field: '계약' | '매출'
+    function yoyGroup(cur, prv, keyOf, field) {
+      const g = new Map();
+      const add = (r, side) => {
+        const k = keyOf(r);
+        const x = g.get(k) || { key: k, 본부: r.본부, 이름: r.회사명, 중분류: new Map(), 전년: 0, 당년: 0, n전년: 0, n당년: 0 };
+        x[side] += r[field]; x[side === '당년' ? 'n당년' : 'n전년']++;
+        x.중분류.set(r.중분류, (x.중분류.get(r.중분류) || 0) + Math.abs(r[field]));
+        g.set(k, x);
+      };
+      cur.forEach((r) => add(r, '당년'));
+      prv.forEach((r) => add(r, '전년'));
+      return [...g.values()].map((x) => {
+        const 증감 = x.당년 - x.전년;
+        const 구분 = !x.n전년 ? '신규' : !x.n당년 ? '이탈' : 증감 > 0 ? '증가' : 증감 < 0 ? '감소' : '변동 없음';
+        const 주중분류 = [...x.중분류].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+        return { ...x, 증감, 구분, 주중분류 };
+      }).filter((x) => Math.abs(x.증감) >= 0.5 / U || x.구분 === '변동 없음')
+        .sort((a, b) => Math.abs(b.증감) - Math.abs(a.증감));
+    }
+    const yoyByClient = (cur, prv, field) => yoyGroup(cur, prv, (r) => `${r.본부}|${clientKey(r.회사명)}`, field);
+    const yoyByCat = (cur, prv, field) => yoyGroup(cur, prv, (r) => r.중분류, field);
+
     const summaryRows = [];
     for (const m of months) {
       for (const b of [...buList, TOTAL]) {
@@ -348,7 +389,7 @@ const Model = (() => {
 
     return {
       empty: false, warnings, months, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, yoyByClient, yoyByCat, summaryRows,
       unmappedBu, unmappedCat,
     };
   }

@@ -1,7 +1,7 @@
 // 화면 — 파일 올리기, 대시보드, 전월 대비 분석, 데이터 요약, 검증
 (() => {
   const { TOTAL, PEOPLE, monthLabel } = Model;
-  const state = { cfg: null, datasets: [], res: null, errors: [], sel: { month: null, bu: TOTAL }, tab: 'dash', mom: { kind: '전체', q: '' } };
+  const state = { cfg: null, datasets: [], res: null, errors: [], sel: { month: null, bu: TOTAL }, tab: 'dash', mom: { kind: '전체', q: '' }, yoy: { field: '계약', kind: '전체', q: '', all: false } };
   const charts = [];
   const pendingCharts = []; // 캔버스가 화면에 붙은 뒤에 그려야 크기가 맞는다
   const app = document.getElementById('app');
@@ -117,13 +117,13 @@
       warnings([...state.errors, ...(cfg.problems || []), ...res.warnings]),
       filters(res),
     ].filter(Boolean));
-    const view = { dash: dashboard, mom: momView, summary: summaryView, check: checkView }[state.tab];
+    const view = { dash: dashboard, mom: momView, yoy: yoyView, summary: summaryView, check: checkView }[state.tab];
     app.append(view(res, cur));
     pendingCharts.splice(0).forEach((draw) => draw());
   }
 
   function tabs() {
-    const t = [['dash', '대시보드'], ['mom', '전월 대비 분석'], ['summary', '데이터 요약'], ['check', '검증']];
+    const t = [['dash', '대시보드'], ['mom', '전월 대비 분석'], ['yoy', '전년 대비 분석'], ['summary', '데이터 요약'], ['check', '검증']];
     return el('div', { class: 'tabs', role: 'tablist' }, t.map(([k, label]) => el('button', {
       class: 'tab', role: 'tab', 'aria-selected': String(state.tab === k),
       onclick: () => { state.tab = k; render(); }, text: label })));
@@ -373,6 +373,116 @@
     return box;
   }
   const stat = (k, v) => el('div', { class: 'stat' }, el('div', { class: 'k', text: k }), el('div', { class: 'v', text: v }));
+  const rate = (now, before) => (now == null || !before ? null : (now - before) / Math.abs(before));
+  const pctSigned = (v) => (v == null ? '-' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(1)}%`);
+
+  // ---- 전년 대비 분석 ------------------------------------------------------
+  const YOY_LIMIT = 100; // 고객 목록은 처음에 증감이 큰 순서로 이만큼만 보여준다
+  // 합계는 입력용 '전년실적'(공식 값) 기준, 중분류·고객별 내역은 작년 같은 달 ERP 원본 기준.
+  function yoyView(res, cur) {
+    const F = state.yoy.field;
+    const box = el('div');
+    const pyKey = F === '계약' ? '계약전년' : '매출전년';
+    const m = state.sel.month; const pm = Model.addMonths(m, -12);
+    box.append(el('div', { class: 'toolbar' },
+      el('span', { class: 'muted', text: '비교 기준' }),
+      el('div', { class: 'seg' }, ['계약', '매출'].map((k) => el('button', { 'aria-pressed': String(F === k), onclick: () => { state.yoy.field = k; render(); }, text: k })))));
+    box.append(el('div', { class: 'cards-row' },
+      stat(`${F} ${monthLabel(m)} 누적 · ${state.sel.bu}`, fmt(cur[F])),
+      stat(`전년 동월 (${monthLabel(pm)})`, fmt(cur[pyKey])),
+      stat('증감', fmt(cur[F] != null && cur[pyKey] != null ? cur[F] - cur[pyKey] : null)),
+      stat('증감률', pctSigned(rate(cur[F], cur[pyKey])))));
+
+    // 월별 누적 추이: 올해 vs 작년
+    const trend = el('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-bottom:12px' });
+    const ms = res.months.map((x) => res.metric(x, state.sel.bu));
+    for (const k of ['계약', '매출']) {
+      const cv = el('canvas', { role: 'img', 'aria-label': `월별 누적 ${k} 올해와 작년 비교` });
+      trend.append(el('div', { class: 'card' },
+        el('div', { class: 'head' }, el('h2', { text: `월별 누적 ${k}` }), el('span', { class: 'unit', text: '(단위: 백만원)' })),
+        el('div', { class: 'chart' }, cv),
+        legend([[`FY${res.fyYear}`, series(0)], [`FY${res.fyYear - 1}`, css('--muted')]])));
+      chart(cv, {
+        type: 'line',
+        data: { labels: res.months.map(monthLabel), datasets: [
+          { label: `FY${res.fyYear}`, data: ms.map((x) => x[k]), borderColor: series(0), backgroundColor: series(0), borderWidth: 2, pointRadius: 4, spanGaps: false },
+          { label: `FY${res.fyYear - 1}`, data: ms.map((x) => x[k === '계약' ? '계약전년' : '매출전년']), borderColor: css('--muted'), backgroundColor: css('--muted'), borderWidth: 2, borderDash: [4, 4], pointRadius: 3 },
+        ] },
+        options: baseOpts({
+          interaction: { mode: 'index', intersect: false },
+          scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, font: { size: 11 } } },
+            y: { beginAtZero: true, grid: { color: css('--grid') }, border: { display: false }, ticks: { callback: (v) => fmt(v) } } },
+          plugins: { legend: { display: false }, datalabels: { display: false },
+            tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.parsed.y)}` } } },
+        }),
+      });
+    }
+    box.append(trend);
+
+    // 본부별 표
+    const head = ['본부', '전년 계약', '당년 계약', '증감', '증감률', '전년 매출', '당년 매출', '증감', '증감률'];
+    box.append(el('section', { class: 'block' }, el('h3', { text: `본부별 전년 동월 대비 (${monthLabel(pm)} → ${monthLabel(m)}, 행을 누르면 그 본부만 봅니다)` }),
+      el('div', { class: 'table-wrap' }, el('table', {},
+        el('thead', {}, el('tr', {}, head.map((h, i) => el('th', { class: i ? 'num' : '', text: h })))),
+        el('tbody', {}, [...res.buList, TOTAL].map((b) => {
+          const x = res.metric(m, b);
+          return el('tr', { class: b === TOTAL ? 'total' : '', style: 'cursor:pointer', onclick: () => { state.sel.bu = b; render(); } },
+            el('td', { text: b }),
+            el('td', { class: 'num', text: fmt(x.계약전년) }), el('td', { class: 'num', text: fmt(x.계약) }),
+            el('td', { class: 'num' }, delta(x.계약증감년)), el('td', { class: 'num', text: pctSigned(rate(x.계약, x.계약전년)) }),
+            el('td', { class: 'num', text: fmt(x.매출전년) }), el('td', { class: 'num', text: fmt(x.매출) }),
+            el('td', { class: 'num' }, delta(x.매출증감년)), el('td', { class: 'num', text: pctSigned(rate(x.매출, x.매출전년)) }));
+        }))))));
+
+    const d = res.yoyDetail(m);
+    if (!d.ok) { box.append(el('p', { class: 'muted', text: d.why })); return box; }
+    const inBu = (r) => state.sel.bu === TOTAL || r.본부 === state.sel.bu;
+    const curRows = d.cur.filter(inBu); const prvRows = d.prv.filter(inBu);
+    const total = (rows) => rows.reduce((s2, r) => s2 + r[F], 0);
+    const gap = total(prvRows) - (cur[pyKey] ?? total(prvRows));
+    if (Math.abs(gap) >= 0.5) {
+      box.append(el('div', { class: 'warnings', text: `작년 ${monthLabel(pm)} 원본 합계(${fmt(total(prvRows))})와 입력용 '전년실적'(${fmt(cur[pyKey])})이 ${fmt(gap)}만큼 다릅니다. 조직개편 조정이나 원본에 없는 수기분 때문일 수 있습니다. 아래 내역은 원본 기준입니다.` }));
+    }
+
+    // 중분류별
+    const cats = res.yoyByCat(curRows, prvRows, F);
+    box.append(el('section', { class: 'block' }, el('h3', { text: `중분류별 ${F} (작년 같은 달 원본 기준)` }),
+      el('div', { class: 'table-wrap' }, el('table', {},
+        el('thead', {}, el('tr', {}, ['중분류', '전년', '당년', '증감', '증감률'].map((h, i) => el('th', { class: i ? 'num' : '', text: h })))),
+        el('tbody', {}, cats.map((x) => el('tr', {}, el('td', { text: x.key }), el('td', { class: 'num', text: fmt(x.전년) }), el('td', { class: 'num', text: fmt(x.당년) }),
+          el('td', { class: 'num' }, delta(x.증감)), el('td', { class: 'num', text: pctSigned(rate(x.당년, x.전년)) }))))))));
+
+    // 고객별
+    const clients = res.yoyByClient(curRows, prvRows, F);
+    const kinds = ['전체', '신규', '이탈', '증가', '감소'];
+    const byKind = (k) => clients.filter((x) => x.구분 === k);
+    const sumD = (list) => list.reduce((s2, x) => s2 + x.증감, 0);
+    box.append(el('div', { class: 'cards-row' }, ['신규', '이탈', '증가', '감소'].map((k) => stat(`${k} 고객 ${byKind(k).length}곳`, fmt(sumD(byKind(k)))))));
+    const q = state.yoy.q.trim().toLowerCase();
+    const shown = clients.filter((x) => x.구분 !== '변동 없음' && (state.yoy.kind === '전체' || x.구분 === state.yoy.kind)
+      && (!q || String(x.이름).toLowerCase().includes(q)));
+    const header = ['본부', '회사명', '주 중분류', '전년 건수', '당년 건수', '전년', '당년', '증감', '구분'];
+    const search = el('input', { type: 'search', placeholder: '회사명 검색', value: state.yoy.q, 'aria-label': '회사명 검색' });
+    search.addEventListener('change', () => { state.yoy.q = search.value; render(); });
+    box.append(el('section', { class: 'block' },
+      el('h3', { text: `고객별 ${F} 증감 (${shown.length}곳, 증감 금액이 큰 순)` }),
+      el('div', { class: 'toolbar' },
+        el('div', { class: 'seg' }, kinds.map((k) => el('button', { 'aria-pressed': String(state.yoy.kind === k), onclick: () => { state.yoy.kind = k; render(); }, text: k }))),
+        search,
+        el('button', { class: 'btn', text: 'CSV 다운로드', onclick: () => download(`전년대비_${F}_${monthLabel(m)}_${state.sel.bu}.csv`,
+          toCsv(['기준월', '전년 동월', ...header], shown.map((x) => [monthLabel(m), monthLabel(pm), x.본부, x.이름, x.주중분류, x.n전년, x.n당년, x.전년, x.당년, x.증감, x.구분]))) })),
+      el('p', { class: 'muted', text: '계약번호는 해마다 새로 매겨지므로 회사명으로 묶어 비교합니다. (주)·주식회사 표기와 띄어쓰기 차이는 같은 회사로 봅니다.' }),
+      el('div', { class: 'table-wrap' }, el('table', {},
+        el('thead', {}, el('tr', {}, header.map((h, i) => el('th', { class: i >= 3 && i <= 7 ? 'num' : '', text: h })))),
+        el('tbody', {}, (state.yoy.all ? shown : shown.slice(0, YOY_LIMIT)).map((x) => el('tr', {},
+          el('td', { text: x.본부 }), el('td', { text: x.이름 }), el('td', { text: x.주중분류 }),
+          el('td', { class: 'num', text: fmt(x.n전년) }), el('td', { class: 'num', text: fmt(x.n당년) }),
+          el('td', { class: 'num', text: fmt(x.전년, 1) }), el('td', { class: 'num', text: fmt(x.당년, 1) }),
+          el('td', { class: 'num' }, delta(x.증감, { digits: 1 })), el('td', {}, el('span', { class: 'pill', text: x.구분 }))))))),
+      shown.length > YOY_LIMIT ? el('div', { class: 'toolbar' }, el('button', { class: 'btn', onclick: () => { state.yoy.all = !state.yoy.all; render(); },
+        text: state.yoy.all ? `상위 ${YOY_LIMIT}곳만 보기` : `전체 ${fmt(shown.length)}곳 보기 (지금은 상위 ${YOY_LIMIT}곳)` })) : null));
+    return box;
+  }
 
   // ---- 데이터 요약 ---------------------------------------------------------
   const SUMMARY_COLS = [
