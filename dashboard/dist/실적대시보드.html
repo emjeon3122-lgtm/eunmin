@@ -128,6 +128,7 @@ tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); font-weigh
 td.wrap-text { white-space: normal; min-width: 200px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
 .toolbar input[type="search"] { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); min-width: 220px; }
+.need { color: var(--bad); font-size: 12px; font-weight: 600; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--surface-2); }
 .muted { color: var(--muted); }
 .cards-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
@@ -416,7 +417,7 @@ const Model = (() => {
   async function readInput(book) {
     const t = async (name, req) => (book.sheetNames.includes(name) ? table(await book.rows(name), req) || [] : []);
     const cfg = {
-      company: '', fyStart: 4, unit: 1000000, catOrder: [],
+      company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100,
       buOrder: [], plan: {}, buMap: new Map(), catMap: new Map(),
       people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(),
       problems: [],
@@ -426,6 +427,7 @@ const Model = (() => {
       if (k === '회사명') cfg.company = text(v);
       else if (k === '회계연도시작월' && num(v) >= 1 && num(v) <= 12) cfg.fyStart = num(v);
       else if (k.startsWith('금액단위') && num(v) > 0) cfg.unit = num(v);
+      else if (k.startsWith('전년대비검토기준') && num(v) >= 0) cfg.yoyReviewMin = num(v);
       else if (k === '중분류순서') cfg.catOrder = text(v).split(',').map((s) => s.trim()).filter(Boolean);
     }
     for (const r of await t('사업계획', ['본부', '사업계획'])) {
@@ -479,7 +481,8 @@ const Model = (() => {
     // 전년 대비 사유: 본부·중분류 단위 (비워 두면 전체)
     for (const r of await t('전년대비사유', ['월', '본부', '중분류', '사유'])) {
       const m = monthOf(r, '전년대비사유'); if (!m || !text(r.get('사유'))) continue;
-      cfg.yoyReasons.set(`${m}|${text(r.get('본부')) || TOTAL}|${text(r.get('중분류')) || TOTAL}`, text(r.get('사유')));
+      const c = text(r.get('중분류'));
+      cfg.yoyReasons.set(`${m}|${text(r.get('본부')) || TOTAL}|${!c || c === '합계' ? TOTAL : c}`, text(r.get('사유')));
     }
     if (!cfg.buOrder.length) cfg.problems.push("입력용 '사업계획' 시트에 본부가 없습니다.");
     return cfg;
@@ -714,6 +717,37 @@ const Model = (() => {
       return out;
     };
     const yoyReason = (m, b, cat) => cfg.yoyReasons.get(`${m}|${b}|${cat || TOTAL}`) || '';
+    const needsReview = (d) => d != null && Math.abs(d) >= cfg.yoyReviewMin;
+
+    // 사유 작성용 목록: 본부 × 중분류(합계 포함) 전년 동월 대비 변화와 참고 정보.
+    // 입력용 '전년대비사유' 시트에 그대로 붙여 넣을 수 있게 월·본부·중분류·사유를 앞에 둔다.
+    function yoyReviewList(m) {
+      const y = yoyDetail(m);
+      if (!y.ok) return null;
+      const out = [];
+      for (const b of [...buList, TOTAL]) {
+        const inB = (r) => b === TOTAL || r.본부 === b;
+        for (const c of [...cats, null]) {
+          const pick = (rows) => rows.filter((r) => inB(r) && (!c || r.중분류 === c));
+          const cur = pick(y.cur); const prv = pick(y.prv);
+          if (!cur.length && !prv.length) continue;
+          const tot = (rows, f) => rows.reduce((s, r) => s + r[f], 0);
+          const newOf = (rows) => rows.filter((r) => r.신규여부 === 'Y');
+          const top = newOf(cur).sort((a, b2) => b2.계약 - a.계약).slice(0, 2)
+            .map((r) => `${r.no} ${r.회사명} ${Math.round(r.계약 * 10) / 10}`);
+          const row = {
+            월: monthLabel(m), 본부: b, 중분류: c || '합계', 사유: yoyReason(m, b, c),
+            전년계약: tot(prv, '계약'), 당년계약: tot(cur, '계약'), 전년매출: tot(prv, '매출'), 당년매출: tot(cur, '매출'),
+            참고: `신규수임 올해 ${newOf(cur).length}건 ${Math.round(tot(newOf(cur), '계약'))} / 작년 ${newOf(prv).length}건 ${Math.round(tot(newOf(prv), '계약'))}`
+              + (top.length ? ` · 올해 큰 신규수임: ${top.join(', ')}` : ''),
+          };
+          row.계약증감 = row.당년계약 - row.전년계약; row.매출증감 = row.당년매출 - row.전년매출;
+          row.검토 = needsReview(row.계약증감) || needsReview(row.매출증감);
+          out.push(row);
+        }
+      }
+      return { prevMonth: y.prevMonth, rows: out };
+    }
 
     const summaryRows = [];
     for (const m of months) {
@@ -725,7 +759,7 @@ const Model = (() => {
 
     return {
       empty: false, warnings, months, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, isFirst, before, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
   }
@@ -1212,16 +1246,32 @@ const Model = (() => {
         el('td', { class: 'num' }, delta(momOf(c))),
         el('td', { class: 'num', text: fmt(py) }), el('td', { class: 'num' }, delta(now != null && py != null ? now - py : null)),
         el('td', { class: 'num', text: pctSigned(rate(now, py)) }),
-        el('td', { class: 'wrap-text', text: res.yoyReason(m, state.sel.bu, c) }));
+        el('td', { class: 'wrap-text' }, (() => {
+          const why = res.yoyReason(m, state.sel.bu, c);
+          if (why) return why;
+          return now != null && py != null && res.needsReview(now - py) ? el('span', { class: 'need', text: '⚠ 사유 필요' }) : '';
+        })()));
     };
     box.append(el('section', { class: 'block' },
       el('h3', { text: `중분류별 전월·전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
       simpleTable(['중분류', `당월 ${F}`, '전월대비', `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
-    if (!y.ok) box.append(el('p', { class: 'muted', text: y.why }));
-    else {
+    if (y.ok) {
+      const review = res.yoyReviewList(m);
+      const need = review.rows.filter((r) => r.검토 && !r.사유).length;
+      box.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },
+        el('div', { class: 'k', text: '전년대비 사유 작성' }),
+        el('div', { class: 'toolbar', style: 'margin:4px 0' },
+          el('button', { class: 'btn primary', text: '사유 작성용 목록 다운로드 (CSV)', onclick: () => download(`전년대비사유_작성용_${monthLabel(m)}.csv`,
+            toCsv(['월', '본부', '중분류', '사유', '검토 필요', '전년 계약', '당년 계약', '계약 증감', '계약 증감률', '전년 매출', '당년 매출', '매출 증감', '매출 증감률', '참고'],
+              [...review.rows].sort((a, b) => (b.검토 - a.검토) || Math.abs(b.계약증감) - Math.abs(a.계약증감)).map((r) => [
+                r.월, r.본부, r.중분류, r.사유, r.검토 ? 'Y' : '',
+                r.전년계약, r.당년계약, r.계약증감, pctSigned(rate(r.당년계약, r.전년계약)),
+                r.전년매출, r.당년매출, r.매출증감, pctSigned(rate(r.당년매출, r.전년매출)), r.참고]))) }),
+          el('span', { class: 'muted', text: `본부·중분류 ${review.rows.length}개 중 증감 ${fmt(state.cfg.yoyReviewMin)} 이상인데 사유가 없는 항목 ${need}개` })),
+        el('div', { class: 'muted', text: "① 목록을 받아 엑셀에서 '사유' 칸만 채우고 ② 전체를 복사해 입력용.xlsx '전년대비사유' 시트에 붙여 넣은 뒤 ③ 입력용 파일을 다시 올리면 사유가 표시됩니다. 나머지 참고 칸은 붙여 넣어도 무시됩니다. 검토 기준 금액은 '설정' 시트의 '전년대비 검토기준(백만원)'으로 바꿀 수 있습니다." })));
       const gap = pyOf(null) - (cur[pyKey] ?? pyOf(null));
       if (Math.abs(gap) >= 0.5) box.append(el('div', { class: 'warnings', text: `작년 ${monthLabel(pm)} 원본 합계(${fmt(pyOf(null))})와 입력용 '전년실적'(${fmt(cur[pyKey])})이 ${fmt(gap)}만큼 다릅니다. 중분류별 전년 값은 원본 기준이라 조직개편 조정이나 원본에 없는 수기분이 빠져 있을 수 있습니다.` }));
-    }
+    } else box.append(el('p', { class: 'muted', text: y.why }));
 
     // 선택한 중분류의 변동 내역
     const label = `${state.sel.bu}${cat ? ' · ' + cat : ''}`;

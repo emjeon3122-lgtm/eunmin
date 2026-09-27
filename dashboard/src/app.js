@@ -474,16 +474,32 @@
         el('td', { class: 'num' }, delta(momOf(c))),
         el('td', { class: 'num', text: fmt(py) }), el('td', { class: 'num' }, delta(now != null && py != null ? now - py : null)),
         el('td', { class: 'num', text: pctSigned(rate(now, py)) }),
-        el('td', { class: 'wrap-text', text: res.yoyReason(m, state.sel.bu, c) }));
+        el('td', { class: 'wrap-text' }, (() => {
+          const why = res.yoyReason(m, state.sel.bu, c);
+          if (why) return why;
+          return now != null && py != null && res.needsReview(now - py) ? el('span', { class: 'need', text: '⚠ 사유 필요' }) : '';
+        })()));
     };
     box.append(el('section', { class: 'block' },
       el('h3', { text: `중분류별 전월·전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
       simpleTable(['중분류', `당월 ${F}`, '전월대비', `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
-    if (!y.ok) box.append(el('p', { class: 'muted', text: y.why }));
-    else {
+    if (y.ok) {
+      const review = res.yoyReviewList(m);
+      const need = review.rows.filter((r) => r.검토 && !r.사유).length;
+      box.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },
+        el('div', { class: 'k', text: '전년대비 사유 작성' }),
+        el('div', { class: 'toolbar', style: 'margin:4px 0' },
+          el('button', { class: 'btn primary', text: '사유 작성용 목록 다운로드 (CSV)', onclick: () => download(`전년대비사유_작성용_${monthLabel(m)}.csv`,
+            toCsv(['월', '본부', '중분류', '사유', '검토 필요', '전년 계약', '당년 계약', '계약 증감', '계약 증감률', '전년 매출', '당년 매출', '매출 증감', '매출 증감률', '참고'],
+              [...review.rows].sort((a, b) => (b.검토 - a.검토) || Math.abs(b.계약증감) - Math.abs(a.계약증감)).map((r) => [
+                r.월, r.본부, r.중분류, r.사유, r.검토 ? 'Y' : '',
+                r.전년계약, r.당년계약, r.계약증감, pctSigned(rate(r.당년계약, r.전년계약)),
+                r.전년매출, r.당년매출, r.매출증감, pctSigned(rate(r.당년매출, r.전년매출)), r.참고]))) }),
+          el('span', { class: 'muted', text: `본부·중분류 ${review.rows.length}개 중 증감 ${fmt(state.cfg.yoyReviewMin)} 이상인데 사유가 없는 항목 ${need}개` })),
+        el('div', { class: 'muted', text: "① 목록을 받아 엑셀에서 '사유' 칸만 채우고 ② 전체를 복사해 입력용.xlsx '전년대비사유' 시트에 붙여 넣은 뒤 ③ 입력용 파일을 다시 올리면 사유가 표시됩니다. 나머지 참고 칸은 붙여 넣어도 무시됩니다. 검토 기준 금액은 '설정' 시트의 '전년대비 검토기준(백만원)'으로 바꿀 수 있습니다." })));
       const gap = pyOf(null) - (cur[pyKey] ?? pyOf(null));
       if (Math.abs(gap) >= 0.5) box.append(el('div', { class: 'warnings', text: `작년 ${monthLabel(pm)} 원본 합계(${fmt(pyOf(null))})와 입력용 '전년실적'(${fmt(cur[pyKey])})이 ${fmt(gap)}만큼 다릅니다. 중분류별 전년 값은 원본 기준이라 조직개편 조정이나 원본에 없는 수기분이 빠져 있을 수 있습니다.` }));
-    }
+    } else box.append(el('p', { class: 'muted', text: y.why }));
 
     // 선택한 중분류의 변동 내역
     const label = `${state.sel.bu}${cat ? ' · ' + cat : ''}`;
