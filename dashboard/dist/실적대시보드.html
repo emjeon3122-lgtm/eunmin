@@ -803,7 +803,7 @@ const Model = (() => {
     if (!ready) { app.append(dropScreen()); return; }
     const res = state.res; const cfg = state.cfg;
     const cur = res.metric(state.sel.month, state.sel.bu);
-    app.append(
+    app.append(...[
       el('div', { class: 'top' },
         el('h1', { text: `${cfg.company ? cfg.company + ' ' : ''}FY${res.fyYear} 사업계획 및 실적` }),
         el('span', { class: 'asof', text: cur.asOf ? `기준일 ${cur.asOf} (ERP 등록일자 기준)` : '' }),
@@ -813,7 +813,7 @@ const Model = (() => {
       tabs(),
       warnings([...state.errors, ...(cfg.problems || []), ...res.warnings]),
       filters(res),
-    );
+    ].filter(Boolean));
     const view = { dash: dashboard, mom: momView, summary: summaryView, check: checkView }[state.tab];
     app.append(view(res, cur));
     pendingCharts.splice(0).forEach((draw) => draw());
@@ -868,7 +868,9 @@ const Model = (() => {
   function chart(canvas, config) {
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.color = css('--ink-2');
-    Chart.defaults.animation = { duration: 250 };
+    // 애니메이션을 끄면 requestAnimationFrame 없이 즉시 그린다.
+    // (일부 PC·미리보기 창에서는 애니메이션 프레임이 돌지 않아 그래프가 빈칸으로 남았다)
+    Chart.defaults.animation = false;
     pendingCharts.push(() => {
       try {
         charts.push(new Chart(canvas, config));
