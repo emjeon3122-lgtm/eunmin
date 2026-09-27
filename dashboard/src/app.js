@@ -45,8 +45,10 @@
   }
   const kvDelta = (label, v, opt) => el('div', { class: 'kv' }, el('div', { class: 'k', text: label }), delta(v, opt));
 
-  function download(name, text) {
-    const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+  function download(name, text, type = 'text/csv;charset=utf-8') {
+    // CSV 는 엑셀에서 한글이 깨지지 않도록 BOM 을 붙인다.
+    const body = type.startsWith('text/csv') ? '﻿' + text : text;
+    const url = URL.createObjectURL(new Blob([body], { type }));
     const a = el('a', { href: url, download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -70,6 +72,14 @@
     for (const f of files) {
       try {
         const buf = await f.arrayBuffer();
+        if (/\.json$/i.test(f.name)) {
+          const snap = Model.readSnapshot(new TextDecoder().decode(buf), f.name);
+          state.datasets = state.datasets.filter((d) => d.fileName !== f.name);
+          state.datasets.push(...snap.datasets);
+          state.files = state.files.filter((x) => x.name !== f.name);
+          state.files.push({ name: f.name, buf, input: false });
+          continue;
+        }
         const book = await XlsxReader.open(buf);
         if (Model.isInputBook(book)) {
           state.cfg = await Model.readInput(book);
@@ -132,7 +142,8 @@
   }
 
   function rebuild() {
-    state.res = state.cfg && state.datasets.length ? Model.build(state.cfg, state.datasets) : null;
+    state.res = state.cfg && state.datasets.length ? Model.build(state.cfg, state.datasets, { fy: state.sel.fy }) : null;
+    if (state.res && !state.res.empty) state.sel.fy = state.res.fyYear;
     if (state.res && !state.res.empty) {
       if (!state.sel.month || !state.res.months.includes(state.sel.month) || !state.res.loadedMonths.has(state.sel.month)) state.sel.month = state.res.latest;
       if (state.sel.bu !== TOTAL && !state.res.buList.includes(state.sel.bu)) state.sel.bu = TOTAL;
@@ -141,7 +152,7 @@
   }
 
   function pickFiles() {
-    const input = el('input', { type: 'file', accept: '.xlsx,.xlsm', multiple: true, class: 'hidden' });
+    const input = el('input', { type: 'file', accept: '.xlsx,.xlsm,.json', multiple: true, class: 'hidden' });
     input.addEventListener('change', () => { if (input.files.length) loadFiles([...input.files]); input.remove(); });
     document.body.append(input); input.click();
   }
@@ -193,10 +204,15 @@
     return el('div', { class: 'filters' },
       el('div', { class: 'seg', role: 'group', 'aria-label': '본부 선택' }, bus.map((b) => el('button', {
         'aria-pressed': String(state.sel.bu === b), onclick: () => { state.sel.bu = b; render(); }, text: b }))),
-      el('div', { class: 'seg', role: 'group', 'aria-label': '월 선택' }, res.months.map((m) => el('button', {
-        'aria-pressed': String(state.sel.month === m), disabled: !res.loadedMonths.has(m),
-        title: res.loadedMonths.has(m) ? '' : '이 달 자료를 아직 올리지 않았습니다',
-        onclick: () => { state.sel.month = m; render(); }, text: monthLabel(m) }))));
+      res.fys.length > 1 ? el('div', { class: 'seg', role: 'group', 'aria-label': '회계연도 선택' }, res.fys.map((fy) => el('button', {
+        'aria-pressed': String(res.fyYear === fy), onclick: () => { state.sel.fy = fy; state.sel.month = null; rebuild(); }, text: `FY${fy}` }))) : null,
+      el('div', { class: 'seg', role: 'group', 'aria-label': '월 선택' }, res.months.map((m) => {
+        const locked = res.contracts.get(m)?.locked;
+        return el('button', {
+          'aria-pressed': String(state.sel.month === m), disabled: !res.loadedMonths.has(m),
+          title: !res.loadedMonths.has(m) ? '이 달 자료를 아직 올리지 않았습니다' : locked ? '마감(확정)된 달' : '',
+          onclick: () => { state.sel.month = m; render(); }, text: `${monthLabel(m)}${locked ? ' 🔒' : ''}` });
+      })));
   }
 
   function dropScreen() {
@@ -639,12 +655,33 @@
   function checkView(res) {
     const box = el('div');
     // 불러온 파일
-    const monthOptions = (() => { const out = []; const first = Model.addMonths(res.fyFirst, -12); for (let i = 0; i < 36; i++) out.push(Model.addMonths(first, i)); return out; })();
+    const monthOptions = (() => { const out = []; const first = Model.addMonths(res.fyFirst, -24); for (let i = 0; i < 48; i++) out.push(Model.addMonths(first, i)); return out; })();
+
+    // 마감(확정) 자료 만들기
+    const loadedList = [...res.loadedMonths].sort();
+    const upto = el('select', { 'aria-label': '마감할 마지막 월' }, loadedList.map((m) => el('option', { value: m, selected: m === (state.closeUpto || loadedList[loadedList.length - 1]), text: monthLabel(m) })));
+    upto.addEventListener('change', () => { state.closeUpto = upto.value; });
+    const lockedMonths = loadedList.filter((m) => res.contracts.get(m)?.locked);
+    box.append(el('section', { class: 'block' }, el('h3', { text: '마감(확정) 자료' }),
+      el('p', { class: 'muted', text: lockedMonths.length
+        ? `확정된 달: ${monthLabel(lockedMonths[0])} ~ ${monthLabel(lockedMonths[lockedMonths.length - 1])} (${lockedMonths.length}개월). 확정된 달은 같은 달 파일을 다시 올려도 바뀌지 않습니다.`
+        : '아직 확정된 달이 없습니다.' }),
+      el('div', { class: 'toolbar' },
+        el('span', { text: '마감할 마지막 월' }), upto,
+        el('button', { class: 'btn primary', text: '마감자료 파일 만들기', onclick: () => {
+          const u = upto.value;
+          download(`실적대시보드_마감자료_${monthLabel(u).replace('월', '')}.json`, Model.exportSnapshot(state.datasets, u), 'application/json');
+        } })),
+      el('p', { class: 'muted', text: '고른 달까지 불러온 모든 월의 계약·매출·미수금 자료를 파일 하나로 묶습니다. 이 파일을 OneDrive 대시보드 폴더에 두고, 다음부터는 월별 파일 대신 이 파일 + 이번 달 파일만 올리면 됩니다. 다음 달 마감 때는 이 파일과 새 달 파일을 올린 뒤 다시 만들어 교체하세요.' })));
     box.append(el('section', { class: 'block' }, el('h3', { text: '불러온 파일' }),
       el('p', { class: 'muted', text: '기준월은 ERP 등록일자 중 가장 늦은 날짜로 자동 판단합니다. 틀리면 여기서 바꾸세요.' }),
       el('div', { class: 'table-wrap' }, el('table', {},
-        el('thead', {}, el('tr', {}, ['파일', '시트', '종류', '기준월', '기준일', '건수', '계약번호 없어 제외한 행'].map((h, i) => el('th', { class: i >= 5 ? 'num' : '', text: h })))),
-        el('tbody', {}, state.datasets.map((d) => {
+        el('thead', {}, el('tr', {}, ['파일', '시트', '종류', '기준월', '기준일', '건수', '수기 행(계약번호 없음)'].map((h, i) => el('th', { class: i >= 5 ? 'num' : '', text: h })))),
+        el('tbody', {}, [...state.datasets].sort((a, b) => String(a.month).localeCompare(String(b.month))).map((d) => {
+          if (d.locked) {
+            return el('tr', {}, el('td', { text: d.fileName }), el('td', { text: d.sheetName }), el('td', { text: d.kind === 'contract' ? '계약·매출' : '미수금' }),
+              el('td', { text: `${monthLabel(d.month)} 🔒` }), el('td', { text: d.asOf || '-' }), el('td', { class: 'num', text: fmt(d.rows.length) }), el('td', { class: 'num', text: d.noId ? fmt(d.noId) : '-' }));
+          }
           const sel = el('select', { 'aria-label': '기준월' }, el('option', { value: '', text: '(미지정)' }),
             monthOptions.map((m) => el('option', { value: m, selected: d.month === m, text: monthLabel(m) })));
           sel.addEventListener('change', () => { d.month = sel.value || null; rebuild(); if (state.persist) persist(); });
@@ -655,11 +692,11 @@
     // 월별 합계(원) — 손익계산서 대사용
     box.append(el('section', { class: 'block' }, el('h3', { text: '월별 합계 (원 단위, 기장 수기분 포함) — 손익계산서 매출과 대사하세요' }),
       el('div', { class: 'table-wrap' }, el('table', {},
-        el('thead', {}, el('tr', {}, ['월', '계약', '매출', '기장 수기분(계약)'].map((h, i) => el('th', { class: i ? 'num' : '', text: h })))),
+        el('thead', {}, el('tr', {}, ['월', '계약', '매출', '기장 수기분(계약)', '수기분 출처'].map((h, i) => el('th', { class: i && i < 4 ? 'num' : '', text: h })))),
         el('tbody', {}, res.months.filter((m) => res.loadedMonths.has(m)).map((m) => {
-          const x = res.metric(m, TOTAL); const g = state.cfg.gijang.filter((z) => z.month === m).reduce((s, z) => s + z.계약, 0);
+          const x = res.metric(m, TOTAL); const g = res.gijangFor(m).reduce((s, z) => s + z.계약, 0);
           return el('tr', {}, el('td', { text: monthLabel(m) }), el('td', { class: 'num', text: fmt(x.계약 * state.cfg.unit) }),
-            el('td', { class: 'num', text: fmt(x.매출 * state.cfg.unit) }), el('td', { class: 'num', text: fmt(g) }));
+            el('td', { class: 'num', text: fmt(x.매출 * state.cfg.unit) }), el('td', { class: 'num', text: fmt(g) }), el('td', { text: res.gijangSource(m) || '-' }));
         }))))));
 
     // 해약 건
@@ -692,7 +729,7 @@
       if (!state.cfg.people[m]) missing.push(`${monthLabel(m)}: 인원 입력 없음`);
       if (state.cfg.fund[m]?.자금 == null) missing.push(`${monthLabel(m)}: 자금 입력 없음`);
       if (!res.ars.has(m) && !state.cfg.arManual[m]) missing.push(`${monthLabel(m)}: 미수금 자료 없음`);
-      if (!state.cfg.prev[m]) missing.push(`${monthLabel(m)}: 전년실적 입력 없음`);
+      if (!state.cfg.prev[m] && !res.loadedMonths.has(Model.addMonths(m, -12))) missing.push(`${monthLabel(m)}: 전년 비교 자료 없음 (입력용 '전년실적' 또는 작년 같은 달 자료)`);
     }
     box.append(el('section', { class: 'block' }, el('h3', { text: '입력용 엑셀 확인' }),
       missing.length ? el('ul', {}, missing.map((t) => el('li', { text: t }))) : el('p', { class: 'muted', text: '자료가 있는 모든 달의 입력값이 채워져 있습니다.' })));
