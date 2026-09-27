@@ -172,16 +172,24 @@
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.color = css('--ink-2');
     Chart.defaults.animation = { duration: 250 };
-    pendingCharts.push(() => charts.push(new Chart(canvas, config)));
+    pendingCharts.push(() => {
+      try {
+        charts.push(new Chart(canvas, config));
+      } catch (e) {
+        canvas.replaceWith(emptyNote(`그래프를 그리지 못했습니다: ${e.message}`));
+      }
+    });
   }
+  const emptyNote = (msg) => el('div', { class: 'empty-note', text: msg });
   const baseOpts = (extra = {}) => ({
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false }, datalabels: { display: false },
       tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label || ctx.label}: ${fmt(ctx.parsed?.y ?? ctx.parsed?.x ?? ctx.parsed)}` } } },
     ...extra,
   });
-  function donut(canvas, labels, values, colors, { cutout = '62%', label = true, gauge = false } = {}) {
+  function donut(canvas, labels, values, colors, { cutout = '62%', label = true, gauge = false, empty = '자료 없음' } = {}) {
     const total = values.reduce((s, v) => s + (v || 0), 0);
+    if (!gauge && !(total > 0)) { canvas.replaceWith(emptyNote(empty)); return; }
     chart(canvas, {
       type: 'doughnut',
       data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: css('--surface'), borderWidth: 2 }] },
@@ -238,7 +246,7 @@
       el('div', { class: 'chart' }, catCv, el('div', { class: 'center' }, el('div', { class: 'big', text: fmt(cur.계약) }), el('div', { class: 'sub', text: pct(cur.달성률계약) }))),
       el('div', { class: 'side' }, kvDelta('전년대비', cur.계약증감년), kvDelta('전월대비', cur.계약증감월))),
     legend(res.cats.map((c, i) => [`${c} ${fmt(cur.cats[c])}`, catColors[i]]))));
-    donut(catCv, res.cats, res.cats.map((c) => cur.cats[c]), catColors);
+    donut(catCv, res.cats, res.cats.map((c) => cur.cats[c]), catColors, { empty: '계약 자료 없음' });
 
     // 달성률(매출) — 게이지
     const revCv = el('canvas', { role: 'img', 'aria-label': '매출 달성률 게이지' });
@@ -256,7 +264,7 @@
       el('div', { class: 'side' }, el('div', { class: 'k muted', text: '<KICPA>' }),
         kvDelta('전년대비', cur.회계사증감년), kvDelta('전월대비', cur.회계사증감월))),
     legend(PEOPLE.map((p, i) => [`${p} ${fmt(cur.people[p])}`, pplColors[i]]))));
-    donut(pplCv, PEOPLE, PEOPLE.map((p) => cur.people[p]), pplColors, { cutout: '45%' });
+    donut(pplCv, PEOPLE, PEOPLE.map((p) => cur.people[p]), pplColors, { cutout: '45%', empty: `${monthLabel(state.sel.month)} 인원이 입력용 엑셀 '인원' 시트에 없습니다` });
 
     // 계약 및 매출(누적)
     const cumCv = el('canvas', { role: 'img', 'aria-label': '월별 누적 계약·매출과 사업계획' });
@@ -296,7 +304,7 @@
       el('div', { class: 'chart' }, fundCv),
       el('div', { class: 'side' }, el('div', { class: 'k muted', text: '<자금>' }), kvDelta('전년대비', cur.자금증감년), kvDelta('전월대비', cur.자금증감월))),
     legend([[`자금 ${fmt(cur.자금)}`, series(0)], [`예수금 ${fmt(cur.예수금)}`, series(1)]])));
-    donut(fundCv, ['자금', '예수금'], [cur.자금, cur.예수금], [series(0), series(1)], { cutout: '45%' });
+    donut(fundCv, ['자금', '예수금'], [cur.자금, cur.예수금], [series(0), series(1)], { cutout: '45%', empty: `${monthLabel(state.sel.month)} 자금이 입력용 엑셀 '자금' 시트에 없습니다` });
 
     // 장기채권(1년 이상)
     grid.append(card('장기채권(1년 이상)', unit,
@@ -437,6 +445,13 @@
         el('thead', {}, el('tr', {}, ['종류', '값', '계약 금액(원, 전체 월 합계)'].map((h, i) => el('th', { class: i === 2 ? 'num' : '', text: h })))),
         el('tbody', {}, unm.map(([a, b, c]) => el('tr', {}, el('td', { text: a }), el('td', { text: b }), el('td', { class: 'num', text: fmt(c) }))))))
         : el('p', { class: 'muted', text: '없음 — 모든 사업부와 계약구분이 매핑되었습니다.' })));
+
+    // 브라우저 정보 (문제 신고용)
+    box.append(el('section', { class: 'block' }, el('h3', { text: '브라우저 정보 (화면이 이상하면 이 부분을 캡처해 주세요)' }),
+      el('ul', {},
+        el('li', { text: `브라우저: ${navigator.userAgent}` }),
+        el('li', { text: `화면: ${window.innerWidth}×${window.innerHeight}, 배율 ${window.devicePixelRatio}` }),
+        el('li', { text: `그래프 라이브러리: ${typeof Chart === 'function' ? 'Chart.js ' + Chart.version : '불러오지 못함'} · 그려진 그래프 ${charts.length}개` }))));
 
     // 입력용 누락
     const missing = [];
