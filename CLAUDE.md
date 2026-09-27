@@ -6,6 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `pet_widget.py` — Windows-only desktop pet widget (stdlib-only: `tkinter` + `ctypes.windll`) that follows the system mouse cursor around the screen with a borderless, click-through, always-on-top transparent window. No pip dependencies.
 - `run_pet_widget.bat` — launcher for `pet_widget.py`. Uses `chcp 65001` + BOM-less UTF-8 per the BAT encoding guideline below.
+- `dashboard/` — 실적 대시보드: a single-file offline HTML app (Korean UI) that reads ERP contract/revenue Excel exports plus an `입력용.xlsx` input workbook in the browser and renders per-본부 KPIs, month-over-month contract diffs, a 데이터요약 table and validation checks. See `dashboard/README.md` for file-detection rules and the calculation spec.
+  - Source in `dashboard/src/` (`xlsx-reader.js` dependency-free xlsx parser, `model.js` aggregation, `app.js` UI, `styles.css`); vendored Chart.js + datalabels in `dashboard/vendor/`.
+  - Build: `python3 dashboard/build.py` → `dashboard/dist/실적대시보드.html` (commit the rebuilt dist file with source changes).
+  - Verify: `NODE_PATH=/opt/node22/lib/node_modules node dashboard/tests/verify.mjs <expected.json> <xlsx...>` (Playwright/Chromium). Playwright's file chooser fails on non-ASCII paths, so copy test workbooks to ASCII names first.
+  - Real business data (xlsx/csv/expected json) must never be committed — `.gitignore` blocks them under `dashboard/`. Excel-sourced strings go into the DOM via `textContent` only, and CSV export escapes formula-leading characters.
 
 Run with: `python pet_widget.py` (or double-click `run_pet_widget.bat`) on Windows. Right-click the pet to quit. There is no build step, package manifest, or test suite yet — this container is headless Linux, so widget behavior can only be syntax-checked here (`python3 -m py_compile pet_widget.py`); functional verification requires an actual Windows desktop session. Update this file as more real code, structure, and tooling get added so future guidance stays accurate.
 

@@ -1,0 +1,5 @@
+# 실적 데이터는 저장소에 올리지 않는다
+dashboard/**/*.xlsx
+dashboard/**/*.xlsm
+dashboard/**/*.csv
+dashboard/**/expected*.json
