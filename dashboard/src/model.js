@@ -80,7 +80,7 @@ const Model = (() => {
     const cfg = {
       company: '', fyStart: 4, unit: 1000000, catOrder: [],
       buOrder: [], plan: {}, buMap: new Map(), catMap: new Map(),
-      people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {},
+      people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(),
       problems: [],
     };
     for (const r of await t('설정', ['항목', '값'])) {
@@ -137,6 +137,11 @@ const Model = (() => {
     for (const r of await t('사유', ['월', '계약번호', '사유'])) {
       const m = monthOf(r, '사유'); if (!m) continue;
       (cfg.reasons[m] ||= new Map()).set(text(r.get('계약번호')), text(r.get('사유')));
+    }
+    // 전년 대비 사유: 본부·중분류 단위 (비워 두면 전체)
+    for (const r of await t('전년대비사유', ['월', '본부', '중분류', '사유'])) {
+      const m = monthOf(r, '전년대비사유'); if (!m || !text(r.get('사유'))) continue;
+      cfg.yoyReasons.set(`${m}|${text(r.get('본부')) || TOTAL}|${text(r.get('중분류')) || TOTAL}`, text(r.get('사유')));
     }
     if (!cfg.buOrder.length) cfg.problems.push("입력용 '사업계획' 시트에 본부가 없습니다.");
     return cfg;
@@ -227,8 +232,9 @@ const Model = (() => {
         const bu = buOf(사업부); const cat = catOf(계약구분);
         if (bu === UNMAPPED) unmappedBu.set(사업부, (unmappedBu.get(사업부) || 0) + c);
         if (cat === UNMAPPED) unmappedCat.set(계약구분, (unmappedCat.get(계약구분) || 0) + c);
-        const x = (a[bu] ||= { 계약: 0, 매출: 0, cats: {} });
-        x.계약 += c; x.매출 += r; x.cats[cat] = (x.cats[cat] || 0) + c;
+        const x = (a[bu] ||= { 계약: 0, 매출: 0, cats: {}, catsR: {} });
+        x.계약 += c; x.매출 += r;
+        x.cats[cat] = (x.cats[cat] || 0) + c; x.catsR[cat] = (x.catsR[cat] || 0) + r;
       };
       d.rows.forEach((row) => add(row.사업부, row.계약구분, row.계약, row.매출));
       cfg.gijang.filter((g) => g.month === m).forEach((g) => add(g.사업부, g.계약구분, g.계약, g.매출));
@@ -263,7 +269,7 @@ const Model = (() => {
     const U = cfg.unit;
     const cVal = (m, b) => (agg[m] ? sumOver(b, (x) => (agg[m][x] ? agg[m][x].계약 / U : 0)) : null);
     const rVal = (m, b) => (agg[m] ? sumOver(b, (x) => (agg[m][x] ? agg[m][x].매출 / U : 0)) : null);
-    const catVal = (m, b, cat) => (agg[m] ? sumOver(b, (x) => (agg[m][x] ? (agg[m][x].cats[cat] || 0) / U : 0)) : null);
+    const catVal = (m, b, cat, key = 'cats') => (agg[m] ? sumOver(b, (x) => (agg[m][x] ? (agg[m][x][key][cat] || 0) / U : 0)) : null);
     const prevVal = (m, b, k) => sumOver(b, (x) => cfg.prev[m]?.[x]?.[k] ?? null);
     const peopleVal = (m, b, k) => sumOver(b, (x) => cfg.people[m]?.[x]?.[k] ?? null);
     const arVal = (m, b) => (arAgg[m] ? sumOver(b, (x) => arAgg[m][x] ?? 0) : null);
@@ -291,6 +297,7 @@ const Model = (() => {
         달성률계약: c != null && plan ? c / plan : null,
         달성률매출: r != null && plan ? r / plan : null,
         cats: Object.fromEntries(cats.map((k) => [k, catVal(m, b, k)])),
+        catsR: Object.fromEntries(cats.map((k) => [k, catVal(m, b, k, 'catsR')])),
         계약전년: prevVal(m, b, '계약'), 매출전년: prevVal(m, b, '매출'),
         계약증감년: diff(c, prevVal(m, b, '계약')), 계약증감월: diff(c, cPrevM),
         매출증감년: diff(r, prevVal(m, b, '매출')), 매출증감월: diff(r, rPrevM),
@@ -302,8 +309,8 @@ const Model = (() => {
       };
     }
 
-    // 전월 대비 계약 건별 증감 (계약 = 발행예정금액 + 조정매출액)
-    function momDetail(m) {
+    // 전월 대비 계약 건별 증감. field: '계약'(발행예정금액 + 조정매출액) | '매출'(조정후매출액)
+    function momDetail(m, field = '계약') {
       if (isFirst(m)) return { ok: false, why: '회계연도 첫 달은 누적이 새로 시작되어 전월 비교를 하지 않습니다.' };
       const cur = contracts.get(m); const prv = contracts.get(before(m));
       if (!cur) return { ok: false, why: `${monthLabel(m)} 자료가 없습니다.` };
@@ -316,18 +323,24 @@ const Model = (() => {
         const d = after - before_;
         if (Math.abs(d) < 0.5) return;
         rows.push({ 본부: buOf(r.사업부), 사업부: r.사업부, no: r.no, 회사명: r.회사명, 보고서명: r.보고서명,
-          계약구분: r.계약구분, 중분류: catOf(r.계약구분), 전월: before_ / U, 당월: after / U, 증감: d / U,
+          계약구분: r.계약구분, 중분류: catOf(r.계약구분), 신규여부: r.신규여부 || '', 전월: before_ / U, 당월: after / U, 증감: d / U,
           구분: kind || (d > 0 ? '증가' : '감소'), 사유: reasons.get(r.no) || (kind === '신규' ? '신규' : '') });
       };
       for (const r of cur.rows) {
         const p = prevMap.get(r.no); seen.add(r.no);
-        push(r, p ? p.계약 : 0, r.계약, p ? null : '신규');
+        // 같은 계약이라도 사업부·계약구분이 바뀌면 이전 분류에서 빼고 새 분류에 더한다(중분류·본부별 합계가 맞도록).
+        if (p && (buOf(p.사업부) !== buOf(r.사업부) || catOf(p.계약구분) !== catOf(r.계약구분))) {
+          push(p, p[field], 0, '분류변경');
+          push(r, 0, r[field], '분류변경');
+          continue;
+        }
+        push(r, p ? p[field] : 0, r[field], p ? null : '신규');
       }
-      for (const p of prv.rows) if (!seen.has(p.no)) push(p, p.계약, 0, '삭제');
+      for (const p of prv.rows) if (!seen.has(p.no)) push(p, p[field], 0, '삭제');
       // 기장 수기분은 사업부별 합계로 비교
       const gSum = (mm) => {
         const s = new Map();
-        cfg.gijang.filter((g) => g.month === mm).forEach((g) => s.set(g.사업부, (s.get(g.사업부) || 0) + g.계약));
+        cfg.gijang.filter((g) => g.month === mm).forEach((g) => s.set(g.사업부, (s.get(g.사업부) || 0) + g[field]));
         return s;
       };
       const gc = gSum(m); const gp = gSum(before(m));
@@ -338,14 +351,15 @@ const Model = (() => {
       return { ok: true, rows, prevMonth: before(m) };
     }
 
-    // 전년 동월 대비: 작년 같은 달 ERP 원본이 있으면 중분류·고객별로 비교한다.
-    // 계약번호는 해마다 새로 매겨지므로 고객(회사명) 기준으로 묶는다. 작년 자료에도 현재 본부매핑을 적용한다.
-    const clientKey = (name) => norm(name).replace(/\(주\)|㈜|주식회사|\(유\)|유한회사/g, '') || '(회사명 없음)';
+    // 전년 동월 대비: 작년 같은 달 ERP 원본이 있으면 중분류별로 비교하고 주요 계약을 보여준다.
+    // 계약번호는 해마다 새로 매겨지므로 계약끼리 짝을 짓지 않는다. 작년 자료에도 현재 본부매핑을 적용한다.
     function yoyRows(m) {
       const d = contracts.get(m);
       if (!d) return null;
-      const rows = d.rows.map((r) => ({ 본부: buOf(r.사업부), 사업부: r.사업부, 회사명: r.회사명, 중분류: catOf(r.계약구분), 계약: r.계약 / U, 매출: r.매출 / U }));
-      cfg.gijang.filter((g) => g.month === m).forEach((g) => rows.push({ 본부: buOf(g.사업부), 사업부: g.사업부, 회사명: '(기장 수기분)', 중분류: catOf(g.계약구분), 계약: g.계약 / U, 매출: g.매출 / U }));
+      const rows = d.rows.map((r) => ({ no: r.no, 본부: buOf(r.사업부), 사업부: r.사업부, 회사명: r.회사명, 보고서명: r.보고서명,
+        중분류: catOf(r.계약구분), 신규여부: r.신규여부 || '', 체결일: r.체결일 || '', 계약: r.계약 / U, 매출: r.매출 / U }));
+      cfg.gijang.filter((g) => g.month === m).forEach((g) => rows.push({ no: '(기장 수기분)', 본부: buOf(g.사업부), 사업부: g.사업부,
+        회사명: '', 보고서명: g.메모, 중분류: catOf(g.계약구분), 신규여부: '', 체결일: '', 계약: g.계약 / U, 매출: g.매출 / U }));
       return rows;
     }
     function yoyDetail(m) {
@@ -353,31 +367,15 @@ const Model = (() => {
       const cur = yoyRows(m);
       if (!cur) return { ok: false, prevMonth: pm, why: `${monthLabel(m)} 자료가 없습니다.` };
       const prv = yoyRows(pm);
-      if (!prv) return { ok: false, prevMonth: pm, why: `작년 같은 달(${monthLabel(pm)}) ERP 파일을 함께 올리면 중분류·고객별로 어디서 차이가 났는지 볼 수 있습니다.` };
+      if (!prv) return { ok: false, prevMonth: pm, why: `작년 같은 달(${monthLabel(pm)}) ERP 파일을 함께 올리면 중분류별 전년 대비와 작년 주요 계약을 볼 수 있습니다.` };
       return { ok: true, prevMonth: pm, cur, prv };
     }
-    // 두 해의 행을 key 별로 묶어 비교한다. field: '계약' | '매출'
-    function yoyGroup(cur, prv, keyOf, field) {
-      const g = new Map();
-      const add = (r, side) => {
-        const k = keyOf(r);
-        const x = g.get(k) || { key: k, 본부: r.본부, 이름: r.회사명, 중분류: new Map(), 전년: 0, 당년: 0, n전년: 0, n당년: 0 };
-        x[side] += r[field]; x[side === '당년' ? 'n당년' : 'n전년']++;
-        x.중분류.set(r.중분류, (x.중분류.get(r.중분류) || 0) + Math.abs(r[field]));
-        g.set(k, x);
-      };
-      cur.forEach((r) => add(r, '당년'));
-      prv.forEach((r) => add(r, '전년'));
-      return [...g.values()].map((x) => {
-        const 증감 = x.당년 - x.전년;
-        const 구분 = !x.n전년 ? '신규' : !x.n당년 ? '이탈' : 증감 > 0 ? '증가' : 증감 < 0 ? '감소' : '변동 없음';
-        const 주중분류 = [...x.중분류].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-        return { ...x, 증감, 구분, 주중분류 };
-      }).filter((x) => Math.abs(x.증감) >= 0.5 / U || x.구분 === '변동 없음')
-        .sort((a, b) => Math.abs(b.증감) - Math.abs(a.증감));
-    }
-    const yoyByClient = (cur, prv, field) => yoyGroup(cur, prv, (r) => `${r.본부}|${clientKey(r.회사명)}`, field);
-    const yoyByCat = (cur, prv, field) => yoyGroup(cur, prv, (r) => r.중분류, field);
+    const sumByCat = (rows, field) => {
+      const out = Object.fromEntries(cats.map((c) => [c, 0]));
+      rows.forEach((r) => { out[r.중분류] = (out[r.중분류] || 0) + r[field]; });
+      return out;
+    };
+    const yoyReason = (m, b, cat) => cfg.yoyReasons.get(`${m}|${b}|${cat || TOTAL}`) || '';
 
     const summaryRows = [];
     for (const m of months) {
@@ -389,7 +387,7 @@ const Model = (() => {
 
     return {
       empty: false, warnings, months, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, yoyByClient, yoyByCat, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
   }

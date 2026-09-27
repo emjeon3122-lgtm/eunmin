@@ -114,6 +114,8 @@ th { position: sticky; top: 0; background: var(--surface-2); font-weight: 600; c
 th.sortable { cursor: pointer; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.total td { font-weight: 700; background: var(--surface-2); }
+tr.selected td { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 td.wrap-text { white-space: normal; min-width: 200px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
 .toolbar input[type="search"] { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); min-width: 220px; }

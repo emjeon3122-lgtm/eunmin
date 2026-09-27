@@ -1,7 +1,7 @@
 // 화면 — 파일 올리기, 대시보드, 전월 대비 분석, 데이터 요약, 검증
 (() => {
   const { TOTAL, PEOPLE, monthLabel } = Model;
-  const state = { cfg: null, datasets: [], res: null, errors: [], sel: { month: null, bu: TOTAL }, tab: 'dash', mom: { kind: '전체', q: '' }, yoy: { field: '계약', kind: '전체', q: '', all: false } };
+  const state = { cfg: null, datasets: [], res: null, errors: [], sel: { month: null, bu: TOTAL, cat: null }, tab: 'dash', mom: { kind: '전체', q: '' }, field: '계약', yoyList: '올해' };
   const charts = [];
   const pendingCharts = []; // 캔버스가 화면에 붙은 뒤에 그려야 크기가 맞는다
   const app = document.getElementById('app');
@@ -317,80 +317,115 @@
     return grid;
   }
 
+  // ---- 분석 탭 공통 --------------------------------------------------------
+  const stat = (k, v, sub) => el('div', { class: 'stat' }, el('div', { class: 'k', text: k }), el('div', { class: 'v', text: v }), sub ? el('div', { class: 'k', text: sub }) : null);
+  const rate = (now, before) => (now == null || !before ? null : (now - before) / Math.abs(before));
+  const pctSigned = (v) => (v == null ? '-' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(1)}%`);
+  const sumD = (list) => list.reduce((s, r) => s + r.증감, 0);
+  // 계약/매출, 중분류(없으면 합계) 기준 값
+  const valOf = (x, F, cat) => (!x || !x.hasData ? null : cat ? (F === '계약' ? x.cats[cat] : x.catsR[cat]) : x[F]);
+  const setCat = (c) => { state.sel.cat = state.sel.cat === c ? null : c; render(); };
+
+  function fieldToggle(extra) {
+    return el('div', { class: 'toolbar' },
+      el('span', { class: 'muted', text: '비교 기준' }),
+      el('div', { class: 'seg' }, ['계약', '매출'].map((k) => el('button', { 'aria-pressed': String(state.field === k), onclick: () => { state.field = k; render(); }, text: k }))),
+      state.sel.cat ? el('button', { class: 'btn', onclick: () => setCat(state.sel.cat), text: `중분류: ${state.sel.cat} ✕` }) : null,
+      extra || null);
+  }
+  function simpleTable(header, rows, numFrom = 1) {
+    return el('div', { class: 'table-wrap' }, el('table', {},
+      el('thead', {}, el('tr', {}, header.map((h, i) => el('th', { class: i >= numFrom ? 'num' : '', text: h })))),
+      el('tbody', {}, rows)));
+  }
+  // 계약 건별 증감 표 (전월 대비)
+  function momRowsTable(rows) {
+    const header = ['본부', '사업부', '계약번호', '회사명', '보고서명', '중분류', '전월', '당월', '증감', '구분', '사유'];
+    return el('div', { class: 'table-wrap' }, el('table', {},
+      el('thead', {}, el('tr', {}, header.map((h, i) => el('th', { class: i >= 6 && i <= 8 ? 'num' : '', text: h })))),
+      el('tbody', {}, rows.map((r) => el('tr', {},
+        el('td', { text: r.본부 }), el('td', { text: r.사업부 }), el('td', { text: r.no }), el('td', { text: r.회사명 }),
+        el('td', { class: 'wrap-text', text: r.보고서명 }), el('td', { text: r.중분류 }),
+        el('td', { class: 'num', text: fmt(r.전월, 1) }), el('td', { class: 'num', text: fmt(r.당월, 1) }),
+        el('td', { class: 'num' }, delta(r.증감, { digits: 1 })), el('td', {}, el('span', { class: 'pill', text: r.구분 })),
+        el('td', { class: 'wrap-text', text: r.사유 }))))));
+  }
+  const kindSums = (rows) => ['신규', '증가', '감소', '삭제', '기장수기', '분류변경'].map((k) => { const l = rows.filter((r) => r.구분 === k); return stat(`${k} ${l.length}건`, fmt(sumD(l))); });
+
   // ---- 전월 대비 분석 ------------------------------------------------------
   function momView(res, cur) {
-    const d = res.momDetail(state.sel.month);
-    const box = el('div');
+    const F = state.field; const m = state.sel.month; const cat = state.sel.cat;
+    const box = el('div', {}, fieldToggle());
+    const d = res.momDetail(m, F);
     if (!d.ok) { box.append(el('p', { class: 'muted', text: d.why })); return box; }
-    const inBu = (r) => state.sel.bu === TOTAL || r.본부 === state.sel.bu;
-    const rows = d.rows.filter(inBu);
-    const sum = (list) => list.reduce((s, r) => s + r.증감, 0);
-    const by = (k) => rows.filter((r) => r.구분 === k);
-    const check = sum(rows) - (cur.계약증감월 || 0);
+    const inBu = (r, b = state.sel.bu) => b === TOTAL || r.본부 === b;
+    const inCat = (r, c = cat) => !c || r.중분류 === c;
+    const rows = d.rows.filter((r) => inBu(r) && inCat(r));
+    const prevX = (b) => res.metric(d.prevMonth, b);
+    const expect = (valOf(cur, F, cat) ?? 0) - (valOf(prevX(state.sel.bu), F, cat) ?? 0);
+    const check = sumD(rows) - expect;
     box.append(el('div', { class: 'cards-row' },
-      stat(`전월대비 계약 증감 (${monthLabel(d.prevMonth)} → ${monthLabel(state.sel.month)})`, fmt(cur.계약증감월)),
-      ...['신규', '증가', '감소', '삭제', '기장수기'].map((k) => stat(`${k} ${by(k).length}건`, fmt(sum(by(k))))),
+      stat(`전월대비 ${F} 증감 · ${state.sel.bu}${cat ? ' · ' + cat : ''}`, fmt(expect), `${monthLabel(d.prevMonth)} → ${monthLabel(m)}`),
+      ...kindSums(rows),
       stat('건별 합계 대사', Math.abs(check) < 0.001 ? '일치 ✓' : `차이 ${fmt(check, 3)}`)));
 
+    // 중분류별 요약
+    const catRow = (c) => {
+      const rs = d.rows.filter((r) => inBu(r) && inCat(r, c));
+      const s = (k) => sumD(rs.filter((r) => k.includes(r.구분)));
+      const now = valOf(cur, F, c); const before_ = valOf(prevX(state.sel.bu), F, c);
+      return el('tr', { class: !c ? 'total' : cat === c ? 'selected' : '', style: 'cursor:pointer', onclick: () => (c ? setCat(c) : (state.sel.cat = null, render())) },
+        el('td', { text: c || '합계' }), el('td', { class: 'num', text: fmt(before_) }), el('td', { class: 'num', text: fmt(now) }),
+        el('td', { class: 'num' }, delta(now != null && before_ != null ? now - before_ : null)),
+        ...[s(['신규']), s(['증가']), s(['감소']), s(['삭제', '기장수기', '분류변경'])].map((v) => el('td', { class: 'num', text: fmt(v) })));
+    };
+    box.append(el('section', { class: 'block' }, el('h3', { text: `중분류별 전월 대비 · ${state.sel.bu} (행을 누르면 그 중분류의 계약만 봅니다)` }),
+      simpleTable(['중분류', `전월 ${F}`, `당월 ${F}`, '증감', '신규', '증가', '감소', '삭제·기장·분류변경'], [...res.cats.map(catRow), catRow(null)])));
+
     // 본부별 요약
-    const bus = [...res.buList];
-    const t = el('table', {}, el('thead', {}, el('tr', {}, ['본부', '전월 계약', '당월 계약', '증감', '신규', '증가', '감소', '삭제·기장'].map((h, i) => el('th', { class: i ? 'num' : '', text: h })))));
-    const tb = el('tbody');
-    for (const b of [...bus, TOTAL]) {
-      const m = res.metric(state.sel.month, b); const p = res.metric(d.prevMonth, b);
-      const rs = d.rows.filter((r) => b === TOTAL || r.본부 === b);
-      const s = (k) => sum(rs.filter((r) => (Array.isArray(k) ? k.includes(r.구분) : r.구분 === k)));
-      tb.append(el('tr', { class: b === TOTAL ? 'total' : '', style: 'cursor:pointer', onclick: () => { state.sel.bu = b; render(); } },
-        el('td', { text: b }), ...[p.계약, m.계약, m.계약증감월, s('신규'), s('증가'), s('감소'), s(['삭제', '기장수기'])].map((v) => el('td', { class: 'num', text: fmt(v) }))));
-    }
-    t.append(tb);
-    box.append(el('section', { class: 'block' }, el('h3', { text: '본부별 요약 (행을 누르면 그 본부만 봅니다)' }), el('div', { class: 'table-wrap' }, t)));
+    box.append(el('section', { class: 'block' }, el('h3', { text: `본부별 전월 대비${cat ? ' · ' + cat : ''} (행을 누르면 그 본부만 봅니다)` }),
+      simpleTable(['본부', `전월 ${F}`, `당월 ${F}`, '증감', '신규', '증가', '감소', '삭제·기장·분류변경'], [...res.buList, TOTAL].map((b) => {
+        const rs = d.rows.filter((r) => inBu(r, b) && inCat(r));
+        const s = (k) => sumD(rs.filter((r) => k.includes(r.구분)));
+        const now = valOf(res.metric(m, b), F, cat); const before_ = valOf(prevX(b), F, cat);
+        return el('tr', { class: b === TOTAL ? 'total' : b === state.sel.bu ? 'selected' : '', style: 'cursor:pointer', onclick: () => { state.sel.bu = b; render(); } },
+          el('td', { text: b }), el('td', { class: 'num', text: fmt(before_) }), el('td', { class: 'num', text: fmt(now) }),
+          el('td', { class: 'num' }, delta(now != null && before_ != null ? now - before_ : null)),
+          ...[s(['신규']), s(['증가']), s(['감소']), s(['삭제', '기장수기', '분류변경'])].map((v) => el('td', { class: 'num', text: fmt(v) })));
+      }))));
 
     // 계약 건별 목록
-    const kinds = ['전체', '신규', '증가', '감소', '삭제', '기장수기', '사유 미입력'];
+    const kinds = ['전체', '신규', '증가', '감소', '삭제', '기장수기', '분류변경', '사유 미입력'];
     const q = state.mom.q.trim().toLowerCase();
     const shown = rows.filter((r) => (state.mom.kind === '전체' || (state.mom.kind === '사유 미입력' ? !r.사유 : r.구분 === state.mom.kind))
       && (!q || [r.no, r.회사명, r.보고서명, r.사유, r.사업부].some((s) => String(s).toLowerCase().includes(q))));
-    const header = ['본부', '사업부', '계약번호', '회사명', '보고서명', '중분류', '전월', '당월', '증감', '구분', '사유'];
-    const search = el('input', { type: 'search', placeholder: '회사명·계약번호·사유 검색', value: state.mom.q, 'aria-label': '검색' });
+    const search = el('input', { type: 'search', placeholder: '계약번호·회사명·보고서명·사유 검색', value: state.mom.q, 'aria-label': '검색' });
     search.addEventListener('change', () => { state.mom.q = search.value; render(); });
     box.append(el('section', { class: 'block' },
-      el('h3', { text: `계약 건별 증감 (${shown.length}건, 증감 금액이 큰 순)` }),
+      el('h3', { text: `계약 건별 ${F} 증감 (${shown.length}건, 증감 금액이 큰 순)` }),
       el('div', { class: 'toolbar' },
         el('div', { class: 'seg' }, kinds.map((k) => el('button', { 'aria-pressed': String(state.mom.kind === k), onclick: () => { state.mom.kind = k; render(); }, text: k }))),
         search,
-        el('button', { class: 'btn', text: 'CSV 다운로드', onclick: () => download(`전월대비_${monthLabel(state.sel.month)}_${state.sel.bu}.csv`,
-          toCsv(['월', ...header], shown.map((r) => [monthLabel(state.sel.month), r.본부, r.사업부, r.no, r.회사명, r.보고서명, r.중분류, r.전월, r.당월, r.증감, r.구분, r.사유]))) })),
+        el('button', { class: 'btn', text: 'CSV 다운로드', onclick: () => download(`전월대비_${F}_${monthLabel(m)}_${state.sel.bu}${cat ? '_' + cat : ''}.csv`,
+          toCsv(['월', '본부', '사업부', '계약번호', '회사명', '보고서명', '중분류', '전월', '당월', '증감', '구분', '사유'],
+            shown.map((r) => [monthLabel(m), r.본부, r.사업부, r.no, r.회사명, r.보고서명, r.중분류, r.전월, r.당월, r.증감, r.구분, r.사유]))) })),
       el('p', { class: 'muted', text: "사유는 입력용.xlsx의 '사유' 시트에 월·계약번호·사유를 적으면 여기에 표시됩니다. '사유 미입력'만 골라 CSV로 받아서 채운 뒤 붙여 넣으면 편합니다." }),
-      el('div', { class: 'table-wrap' }, el('table', {},
-        el('thead', {}, el('tr', {}, header.map((h, i) => el('th', { class: i >= 6 && i <= 8 ? 'num' : '', text: h })))),
-        el('tbody', {}, shown.map((r) => el('tr', {},
-          el('td', { text: r.본부 }), el('td', { text: r.사업부 }), el('td', { text: r.no }), el('td', { text: r.회사명 }),
-          el('td', { class: 'wrap-text', text: r.보고서명 }), el('td', { text: r.중분류 }),
-          el('td', { class: 'num', text: fmt(r.전월, 1) }), el('td', { class: 'num', text: fmt(r.당월, 1) }),
-          el('td', { class: 'num' }, delta(r.증감, { digits: 1 })), el('td', {}, el('span', { class: 'pill', text: r.구분 })),
-          el('td', { class: 'wrap-text', text: r.사유 }))))))));
+      momRowsTable(shown)));
     return box;
   }
-  const stat = (k, v) => el('div', { class: 'stat' }, el('div', { class: 'k', text: k }), el('div', { class: 'v', text: v }));
-  const rate = (now, before) => (now == null || !before ? null : (now - before) / Math.abs(before));
-  const pctSigned = (v) => (v == null ? '-' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(1)}%`);
 
   // ---- 전년 대비 분석 ------------------------------------------------------
-  const YOY_LIMIT = 100; // 고객 목록은 처음에 증감이 큰 순서로 이만큼만 보여준다
-  // 합계는 입력용 '전년실적'(공식 값) 기준, 중분류·고객별 내역은 작년 같은 달 ERP 원본 기준.
+  // 합계는 입력용 '전년실적'(공식 값) 기준, 중분류·계약 내역은 작년 같은 달 ERP 원본 기준.
+  const TOP_N = 15;
   function yoyView(res, cur) {
-    const F = state.yoy.field;
-    const box = el('div');
+    const F = state.field; const m = state.sel.month; const cat = state.sel.cat;
+    const pm = Model.addMonths(m, -12);
     const pyKey = F === '계약' ? '계약전년' : '매출전년';
-    const m = state.sel.month; const pm = Model.addMonths(m, -12);
-    box.append(el('div', { class: 'toolbar' },
-      el('span', { class: 'muted', text: '비교 기준' }),
-      el('div', { class: 'seg' }, ['계약', '매출'].map((k) => el('button', { 'aria-pressed': String(F === k), onclick: () => { state.yoy.field = k; render(); }, text: k })))));
+    const box = el('div', {}, fieldToggle());
     box.append(el('div', { class: 'cards-row' },
       stat(`${F} ${monthLabel(m)} 누적 · ${state.sel.bu}`, fmt(cur[F])),
       stat(`전년 동월 (${monthLabel(pm)})`, fmt(cur[pyKey])),
-      stat('증감', fmt(cur[F] != null && cur[pyKey] != null ? cur[F] - cur[pyKey] : null)),
+      stat('전년대비 증감', fmt(cur[F] != null && cur[pyKey] != null ? cur[F] - cur[pyKey] : null)),
       stat('증감률', pctSigned(rate(cur[F], cur[pyKey])))));
 
     // 월별 누적 추이: 올해 vs 작년
@@ -399,13 +434,13 @@
     for (const k of ['계약', '매출']) {
       const cv = el('canvas', { role: 'img', 'aria-label': `월별 누적 ${k} 올해와 작년 비교` });
       trend.append(el('div', { class: 'card' },
-        el('div', { class: 'head' }, el('h2', { text: `월별 누적 ${k}` }), el('span', { class: 'unit', text: '(단위: 백만원)' })),
+        el('div', { class: 'head' }, el('h2', { text: `월별 누적 ${k} · ${state.sel.bu}` }), el('span', { class: 'unit', text: '(단위: 백만원)' })),
         el('div', { class: 'chart' }, cv),
         legend([[`FY${res.fyYear}`, series(0)], [`FY${res.fyYear - 1}`, css('--muted')]])));
       chart(cv, {
         type: 'line',
         data: { labels: res.months.map(monthLabel), datasets: [
-          { label: `FY${res.fyYear}`, data: ms.map((x) => x[k]), borderColor: series(0), backgroundColor: series(0), borderWidth: 2, pointRadius: 4, spanGaps: false },
+          { label: `FY${res.fyYear}`, data: ms.map((x) => x[k]), borderColor: series(0), backgroundColor: series(0), borderWidth: 2, pointRadius: 4 },
           { label: `FY${res.fyYear - 1}`, data: ms.map((x) => x[k === '계약' ? '계약전년' : '매출전년']), borderColor: css('--muted'), backgroundColor: css('--muted'), borderWidth: 2, borderDash: [4, 4], pointRadius: 3 },
         ] },
         options: baseOpts({
@@ -419,68 +454,85 @@
     }
     box.append(trend);
 
-    // 본부별 표
-    const head = ['본부', '전년 계약', '당년 계약', '증감', '증감률', '전년 매출', '당년 매출', '증감', '증감률'];
-    box.append(el('section', { class: 'block' }, el('h3', { text: `본부별 전년 동월 대비 (${monthLabel(pm)} → ${monthLabel(m)}, 행을 누르면 그 본부만 봅니다)` }),
-      el('div', { class: 'table-wrap' }, el('table', {},
-        el('thead', {}, el('tr', {}, head.map((h, i) => el('th', { class: i ? 'num' : '', text: h })))),
-        el('tbody', {}, [...res.buList, TOTAL].map((b) => {
-          const x = res.metric(m, b);
-          return el('tr', { class: b === TOTAL ? 'total' : '', style: 'cursor:pointer', onclick: () => { state.sel.bu = b; render(); } },
-            el('td', { text: b }),
-            el('td', { class: 'num', text: fmt(x.계약전년) }), el('td', { class: 'num', text: fmt(x.계약) }),
-            el('td', { class: 'num' }, delta(x.계약증감년)), el('td', { class: 'num', text: pctSigned(rate(x.계약, x.계약전년)) }),
-            el('td', { class: 'num', text: fmt(x.매출전년) }), el('td', { class: 'num', text: fmt(x.매출) }),
-            el('td', { class: 'num' }, delta(x.매출증감년)), el('td', { class: 'num', text: pctSigned(rate(x.매출, x.매출전년)) }));
-        }))))));
-
-    const d = res.yoyDetail(m);
-    if (!d.ok) { box.append(el('p', { class: 'muted', text: d.why })); return box; }
+    // 중분류별: 전월 대비 + 전년 대비
+    const y = res.yoyDetail(m);
     const inBu = (r) => state.sel.bu === TOTAL || r.본부 === state.sel.bu;
-    const curRows = d.cur.filter(inBu); const prvRows = d.prv.filter(inBu);
-    const total = (rows) => rows.reduce((s2, r) => s2 + r[F], 0);
-    const gap = total(prvRows) - (cur[pyKey] ?? total(prvRows));
-    if (Math.abs(gap) >= 0.5) {
-      box.append(el('div', { class: 'warnings', text: `작년 ${monthLabel(pm)} 원본 합계(${fmt(total(prvRows))})와 입력용 '전년실적'(${fmt(cur[pyKey])})이 ${fmt(gap)}만큼 다릅니다. 조직개편 조정이나 원본에 없는 수기분 때문일 수 있습니다. 아래 내역은 원본 기준입니다.` }));
+    const curRows = y.ok ? y.cur.filter(inBu) : [];
+    const prvRows = y.ok ? y.prv.filter(inBu) : [];
+    const pyCat = y.ok ? res.sumByCat(prvRows, F) : null;
+    const pmX = res.isFirst(m) ? null : res.metric(res.before(m), state.sel.bu);
+    const momOf = (c) => {
+      if (res.isFirst(m)) return valOf(cur, F, c); // 회계연도 첫 달: 누적이 새로 시작
+      const b = valOf(pmX, F, c); const n = valOf(cur, F, c);
+      return n != null && b != null ? n - b : null;
+    };
+    const pyOf = (c) => (!pyCat ? null : c ? pyCat[c] : Object.values(pyCat).reduce((s, v) => s + v, 0));
+    const catRow = (c) => {
+      const now = valOf(cur, F, c); const py = pyOf(c);
+      return el('tr', { class: !c ? 'total' : cat === c ? 'selected' : '', style: 'cursor:pointer', onclick: () => (c ? setCat(c) : (state.sel.cat = null, render())) },
+        el('td', { text: c || '합계' }), el('td', { class: 'num', text: fmt(now) }),
+        el('td', { class: 'num' }, delta(momOf(c))),
+        el('td', { class: 'num', text: fmt(py) }), el('td', { class: 'num' }, delta(now != null && py != null ? now - py : null)),
+        el('td', { class: 'num', text: pctSigned(rate(now, py)) }),
+        el('td', { class: 'wrap-text', text: res.yoyReason(m, state.sel.bu, c) }));
+    };
+    box.append(el('section', { class: 'block' },
+      el('h3', { text: `중분류별 전월·전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
+      simpleTable(['중분류', `당월 ${F}`, '전월대비', `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
+    if (!y.ok) box.append(el('p', { class: 'muted', text: y.why }));
+    else {
+      const gap = pyOf(null) - (cur[pyKey] ?? pyOf(null));
+      if (Math.abs(gap) >= 0.5) box.append(el('div', { class: 'warnings', text: `작년 ${monthLabel(pm)} 원본 합계(${fmt(pyOf(null))})와 입력용 '전년실적'(${fmt(cur[pyKey])})이 ${fmt(gap)}만큼 다릅니다. 중분류별 전년 값은 원본 기준이라 조직개편 조정이나 원본에 없는 수기분이 빠져 있을 수 있습니다.` }));
     }
 
-    // 중분류별
-    const cats = res.yoyByCat(curRows, prvRows, F);
-    box.append(el('section', { class: 'block' }, el('h3', { text: `중분류별 ${F} (작년 같은 달 원본 기준)` }),
-      el('div', { class: 'table-wrap' }, el('table', {},
-        el('thead', {}, el('tr', {}, ['중분류', '전년', '당년', '증감', '증감률'].map((h, i) => el('th', { class: i ? 'num' : '', text: h })))),
-        el('tbody', {}, cats.map((x) => el('tr', {}, el('td', { text: x.key }), el('td', { class: 'num', text: fmt(x.전년) }), el('td', { class: 'num', text: fmt(x.당년) }),
-          el('td', { class: 'num' }, delta(x.증감)), el('td', { class: 'num', text: pctSigned(rate(x.당년, x.전년)) }))))))));
+    // 선택한 중분류의 변동 내역
+    const label = `${state.sel.bu}${cat ? ' · ' + cat : ''}`;
+    const drill = el('section', { class: 'block' }, el('h3', { text: `${label} — 무엇 때문에 달라졌나` }));
+    const reason = res.yoyReason(m, state.sel.bu, cat);
+    drill.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },
+      el('div', { class: 'k', text: '전년대비 사유' }),
+      reason ? el('div', { style: 'white-space:pre-wrap;font-size:15px', text: reason })
+        : el('div', { class: 'muted', text: `입력용.xlsx '전년대비사유' 시트에 월(${monthLabel(m)})·본부(${state.sel.bu})·중분류(${cat || '비움'})·사유를 적으면 여기에 표시됩니다.` })));
 
-    // 고객별
-    const clients = res.yoyByClient(curRows, prvRows, F);
-    const kinds = ['전체', '신규', '이탈', '증가', '감소'];
-    const byKind = (k) => clients.filter((x) => x.구분 === k);
-    const sumD = (list) => list.reduce((s2, x) => s2 + x.증감, 0);
-    box.append(el('div', { class: 'cards-row' }, ['신규', '이탈', '증가', '감소'].map((k) => stat(`${k} 고객 ${byKind(k).length}곳`, fmt(sumD(byKind(k)))))));
-    const q = state.yoy.q.trim().toLowerCase();
-    const shown = clients.filter((x) => x.구분 !== '변동 없음' && (state.yoy.kind === '전체' || x.구분 === state.yoy.kind)
-      && (!q || String(x.이름).toLowerCase().includes(q)));
-    const header = ['본부', '회사명', '주 중분류', '전년 건수', '당년 건수', '전년', '당년', '증감', '구분'];
-    const search = el('input', { type: 'search', placeholder: '회사명 검색', value: state.yoy.q, 'aria-label': '회사명 검색' });
-    search.addEventListener('change', () => { state.yoy.q = search.value; render(); });
-    box.append(el('section', { class: 'block' },
-      el('h3', { text: `고객별 ${F} 증감 (${shown.length}곳, 증감 금액이 큰 순)` }),
-      el('div', { class: 'toolbar' },
-        el('div', { class: 'seg' }, kinds.map((k) => el('button', { 'aria-pressed': String(state.yoy.kind === k), onclick: () => { state.yoy.kind = k; render(); }, text: k }))),
-        search,
-        el('button', { class: 'btn', text: 'CSV 다운로드', onclick: () => download(`전년대비_${F}_${monthLabel(m)}_${state.sel.bu}.csv`,
-          toCsv(['기준월', '전년 동월', ...header], shown.map((x) => [monthLabel(m), monthLabel(pm), x.본부, x.이름, x.주중분류, x.n전년, x.n당년, x.전년, x.당년, x.증감, x.구분]))) })),
-      el('p', { class: 'muted', text: '계약번호는 해마다 새로 매겨지므로 회사명으로 묶어 비교합니다. (주)·주식회사 표기와 띄어쓰기 차이는 같은 회사로 봅니다.' }),
-      el('div', { class: 'table-wrap' }, el('table', {},
-        el('thead', {}, el('tr', {}, header.map((h, i) => el('th', { class: i >= 3 && i <= 7 ? 'num' : '', text: h })))),
-        el('tbody', {}, (state.yoy.all ? shown : shown.slice(0, YOY_LIMIT)).map((x) => el('tr', {},
-          el('td', { text: x.본부 }), el('td', { text: x.이름 }), el('td', { text: x.주중분류 }),
-          el('td', { class: 'num', text: fmt(x.n전년) }), el('td', { class: 'num', text: fmt(x.n당년) }),
-          el('td', { class: 'num', text: fmt(x.전년, 1) }), el('td', { class: 'num', text: fmt(x.당년, 1) }),
-          el('td', { class: 'num' }, delta(x.증감, { digits: 1 })), el('td', {}, el('span', { class: 'pill', text: x.구분 }))))))),
-      shown.length > YOY_LIMIT ? el('div', { class: 'toolbar' }, el('button', { class: 'btn', onclick: () => { state.yoy.all = !state.yoy.all; render(); },
-        text: state.yoy.all ? `상위 ${YOY_LIMIT}곳만 보기` : `전체 ${fmt(shown.length)}곳 보기 (지금은 상위 ${YOY_LIMIT}곳)` })) : null));
+    // 전월 대비 주요 변동 계약
+    const md = res.momDetail(m, F);
+    if (md.ok) {
+      const rows = md.rows.filter((r) => inBu(r) && (!cat || r.중분류 === cat));
+      drill.append(el('h3', { text: `전월 대비 주요 변동 계약 (${monthLabel(md.prevMonth)} → ${monthLabel(m)}, 상위 ${Math.min(TOP_N, rows.length)}건 / 전체 ${rows.length}건)` }),
+        el('div', { class: 'cards-row' }, ...kindSums(rows)),
+        momRowsTable(rows.slice(0, TOP_N)),
+        el('div', { class: 'toolbar' }, el('button', { class: 'btn', onclick: () => { state.tab = 'mom'; render(); }, text: '전월 대비 분석 탭에서 전체 보기' })));
+    } else {
+      drill.append(el('p', { class: 'muted', text: md.why }));
+    }
+
+    // 전년 대비 구성과 주요 계약
+    if (y.ok) {
+      const sel = (rows) => rows.filter((r) => !cat || r.중분류 === cat);
+      const c = sel(curRows); const p = sel(prvRows);
+      const part = (rows, isNew) => rows.filter((r) => (r.신규여부 === 'Y') === isNew);
+      const tot = (rows) => rows.reduce((s, r) => s + r[F], 0);
+      drill.append(el('h3', { text: `전년 대비 구성 (${monthLabel(pm)} → ${monthLabel(m)}, ERP '신규여부' 기준)` }),
+        el('div', { class: 'cards-row' },
+          stat(`올해 신규수임(Y) ${part(c, true).length}건`, fmt(tot(part(c, true))), `작년 ${part(p, true).length}건 ${fmt(tot(part(p, true)))}`),
+          stat(`올해 기존 ${part(c, false).length}건`, fmt(tot(part(c, false))), `작년 ${part(p, false).length}건 ${fmt(tot(part(p, false)))}`),
+          stat('합계 증감', fmt(tot(c) - tot(p)), `올해 ${fmt(tot(c))} / 작년 ${fmt(tot(p))}`)));
+      const which = state.yoyList === '작년' ? p : c;
+      const reasons = state.cfg.reasons[state.yoyList === '작년' ? pm : m] || new Map();
+      const top = [...which].sort((a, b) => Math.abs(b[F]) - Math.abs(a[F]));
+      const head = ['계약번호', '본부', '사업부', '회사명', '보고서명', '중분류', '체결일', '신규수임', F, '사유(전월대비)'];
+      drill.append(el('div', { class: 'toolbar' },
+        el('strong', { text: `주요 계약 (${F} 큰 순 상위 ${Math.min(TOP_N, top.length)}건 / 전체 ${top.length}건)` }),
+        el('div', { class: 'seg' }, [['올해', monthLabel(m)], ['작년', monthLabel(pm)]].map(([k, l]) => el('button', {
+          'aria-pressed': String((state.yoyList || '올해') === k), onclick: () => { state.yoyList = k; render(); }, text: `${k} (${l})` }))),
+        el('button', { class: 'btn', text: 'CSV 다운로드 (전체)', onclick: () => download(`전년대비_${F}_${state.yoyList || '올해'}_${monthLabel(m)}_${label}.csv`,
+          toCsv(head, top.map((r) => [r.no, r.본부, r.사업부, r.회사명, r.보고서명, r.중분류, r.체결일, r.신규여부, r[F], reasons.get(r.no) || '']))) })),
+      simpleTable(head, top.slice(0, TOP_N).map((r) => el('tr', {},
+        el('td', { text: r.no }), el('td', { text: r.본부 }), el('td', { text: r.사업부 }), el('td', { text: r.회사명 }),
+        el('td', { class: 'wrap-text', text: r.보고서명 }), el('td', { text: r.중분류 }), el('td', { text: r.체결일 }),
+        el('td', { text: r.신규여부 }), el('td', { class: 'num', text: fmt(r[F], 1) }), el('td', { class: 'wrap-text', text: reasons.get(r.no) || '' }))), 8));
+    }
+    box.append(drill);
     return box;
   }
 
