@@ -5,7 +5,9 @@ ERP에서 받은 계약·매출 엑셀과 입력용 엑셀을 올리면 본부�
 
 - **설치 없음**: `dist/실적대시보드.html` 을 크롬이나 엣지로 열면 됩니다.
 - **데이터가 PC 밖으로 나가지 않음**: 파일은 브라우저 안에서만 읽고, 페이지는 외부 접속이 차단되어 있습니다(CSP).
-  창을 닫으면 올린 데이터는 사라집니다.
+  창을 닫으면 올린 데이터는 사라집니다. 화면 위쪽 **'이 PC에 저장'**을 켜면 올린 엑셀을 이 PC 브라우저(IndexedDB)에 보관했다가
+  다음에 열 때 자동으로 다시 불러옵니다. 같은 이름의 파일을 다시 올리면 이전 것을 대신합니다.
+  '저장됨 ✓ (지우기)' 또는 '처음으로'를 누르면 저장한 자료가 지워집니다. 여러 사람이 함께 쓰는 PC에서는 켜지 마세요.
 
 ## 매월 하는 일
 
@@ -63,6 +65,7 @@ node tests/verify.mjs expected.json 입력용.xlsx 작업파일.xlsx ...   # 숫
 
 - `src/xlsx-reader.js`: 외부 라이브러리 없이 xlsx를 읽는 최소 리더(브라우저 내장 DecompressionStream·DOMParser)
 - `src/model.js`: 시트 인식, 집계, 전월 비교
+- `src/store.js`: '이 PC에 저장'(IndexedDB) 보관·복원
 - `src/app.js`, `src/styles.css`: 화면
 - `vendor/`: Chart.js 4.4.4, chartjs-plugin-datalabels 2.2.0 (MIT)
 - 실제 실적 데이터(엑셀, CSV, expected.json)는 저장소에 올리지 않습니다(`.gitignore`).

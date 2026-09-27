@@ -11,6 +11,7 @@ SCRIPTS = [
     ROOT / 'vendor' / 'chartjs-plugin-datalabels.min.js',
     ROOT / 'src' / 'xlsx-reader.js',
     ROOT / 'src' / 'model.js',
+    ROOT / 'src' / 'store.js',
     ROOT / 'src' / 'app.js',
 ]
 OUT = ROOT / 'dist' / '실적대시보드.html'

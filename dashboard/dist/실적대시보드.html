@@ -769,11 +769,53 @@ const Model = (() => {
 
 </script>
 <script>
+/* store.js */
+// 이 PC의 브라우저(IndexedDB)에 올린 엑셀 파일을 저장해 두었다가 다음에 열 때 다시 불러온다.
+// 사용자가 '이 PC에 저장'을 켠 경우에만 저장한다. 저장소를 쓸 수 없는 환경이면 조용히 끈다.
+const Store = (() => {
+  const DB = '실적대시보드';
+  const STORE = 'session';
+  const KEY = 'latest';
+
+  function open() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function run(mode, fn) {
+    const db = await open();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, mode);
+        const req = fn(tx.objectStore(STORE));
+        tx.oncomplete = () => resolve(req?.result);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  // session: { savedAt, files: [{ name, buf }], months: { '파일|시트': 'YYYY-MM' } }
+  const save = (session) => run('readwrite', (s) => s.put(session, KEY));
+  const load = () => run('readonly', (s) => s.get(KEY));
+  const clear = () => run('readwrite', (s) => s.delete(KEY));
+  const available = () => { try { return typeof indexedDB !== 'undefined' && indexedDB !== null; } catch { return false; } };
+
+  return { save, load, clear, available };
+})();
+
+</script>
+<script>
 /* app.js */
 // 화면 — 파일 올리기, 대시보드, 전월 대비 분석, 데이터 요약, 검증
 (() => {
   const { TOTAL, PEOPLE, monthLabel } = Model;
-  const state = { cfg: null, datasets: [], res: null, errors: [], sel: { month: null, bu: TOTAL, cat: null }, tab: 'dash', mom: { kind: '전체', q: '' }, field: '계약', yoyList: '올해' };
+  const state = { cfg: null, datasets: [], files: [], persist: false, savedAt: null, res: null, errors: [], sel: { month: null, bu: TOTAL, cat: null }, tab: 'dash', mom: { kind: '전체', q: '' }, field: '계약', yoyList: '올해' };
   const charts = [];
   const pendingCharts = []; // 캔버스가 화면에 붙은 뒤에 그려야 크기가 맞는다
   const app = document.getElementById('app');
@@ -836,23 +878,71 @@ const Model = (() => {
   }
 
   // ---- 파일 읽기 -----------------------------------------------------------
-  async function loadFiles(files) {
+  // files: File 또는 { name, arrayBuffer() }. 같은 이름의 파일을 다시 올리면 이전 것을 대신한다.
+  async function loadFiles(files, { restoring = false, months = null } = {}) {
     state.errors = [];
     for (const f of files) {
       try {
-        const book = await XlsxReader.open(await f.arrayBuffer());
+        const buf = await f.arrayBuffer();
+        const book = await XlsxReader.open(buf);
         if (Model.isInputBook(book)) {
           state.cfg = await Model.readInput(book);
+          state.files = state.files.filter((x) => !x.input);
+          state.files.push({ name: f.name, buf, input: true });
         } else {
           const found = await Model.readDataBook(book, f.name);
           if (!found.length) state.errors.push(`'${f.name}': 계약·매출(ERP) 시트나 미수금 시트를 찾지 못했습니다.`);
+          state.datasets = state.datasets.filter((d) => d.fileName !== f.name);
           state.datasets.push(...found);
+          state.files = state.files.filter((x) => x.name !== f.name);
+          state.files.push({ name: f.name, buf, input: false });
         }
       } catch (e) {
         state.errors.push(`'${f.name}': ${e.message}`);
       }
     }
+    if (months) state.datasets.forEach((d) => { const k = `${d.fileName}|${d.sheetName}`; if (k in months) d.month = months[k]; });
     rebuild();
+    if (state.persist && !restoring) await persist();
+  }
+
+  // ---- 이 PC에 저장 --------------------------------------------------------
+  async function persist() {
+    try {
+      const months = Object.fromEntries(state.datasets.map((d) => [`${d.fileName}|${d.sheetName}`, d.month]));
+      state.savedAt = new Date().toLocaleString('ko-KR');
+      await Store.save({ savedAt: state.savedAt, files: state.files.map(({ name, buf, input }) => ({ name, buf, input })), months });
+    } catch (e) {
+      state.persist = false;
+      state.errors.push(`이 PC에 저장하지 못했습니다: ${e.message || e}`);
+    }
+    render();
+  }
+  async function forget() {
+    try { await Store.clear(); } catch { /* 저장소를 쓸 수 없으면 지울 것도 없다 */ }
+    state.persist = false; state.savedAt = null;
+  }
+  function saveButton() {
+    if (!Store.available()) return null;
+    if (!state.persist) {
+      return el('button', { class: 'btn', title: '다음에 열 때 파일을 다시 올리지 않아도 되도록 이 PC의 브라우저에 저장합니다',
+        onclick: () => { state.persist = true; persist(); }, text: '이 PC에 저장' });
+    }
+    return el('button', { class: 'btn', title: `${state.savedAt || ''} 저장 · 누르면 저장한 자료를 지웁니다`,
+      onclick: async () => { if (confirm('이 PC에 저장한 자료를 지울까요? 지금 화면은 그대로 유지됩니다.')) { await forget(); render(); } },
+      text: `저장됨 ✓ ${state.savedAt || ''} (지우기)` });
+  }
+  async function restore() {
+    if (!Store.available()) return;
+    try {
+      const saved = await Store.load();
+      if (!saved?.files?.length) return;
+      state.persist = true; state.savedAt = saved.savedAt;
+      const files = [...saved.files].sort((a, b) => b.input - a.input);
+      await loadFiles(files.map((f) => ({ name: f.name, arrayBuffer: async () => f.buf })), { restoring: true, months: saved.months });
+    } catch {
+      // 저장소가 막혀 있거나 손상되었으면 빈 화면에서 시작한다.
+    }
   }
 
   function rebuild() {
@@ -884,7 +974,12 @@ const Model = (() => {
         el('span', { class: 'asof', text: cur.asOf ? `기준일 ${cur.asOf} (ERP 등록일자 기준)` : '' }),
         el('span', { class: 'spacer' }),
         el('button', { class: 'btn', onclick: pickFiles, text: '파일 추가' }),
-        el('button', { class: 'btn', onclick: () => { Object.assign(state, { cfg: null, datasets: [], res: null }); render(); }, text: '처음으로' })),
+        saveButton(),
+        el('button', { class: 'btn', onclick: async () => {
+          if (state.persist && !confirm('처음 화면으로 돌아가면 이 PC에 저장한 자료도 함께 지웁니다. 계속할까요?')) return;
+          await forget();
+          Object.assign(state, { cfg: null, datasets: [], files: [], res: null, errors: [] }); render();
+        }, text: '처음으로' })),
       tabs(),
       warnings([...state.errors, ...(cfg.problems || []), ...res.warnings]),
       filters(res),
@@ -930,7 +1025,7 @@ const Model = (() => {
       warnings([...state.errors, ...(state.cfg ? [] : state.datasets.length ? ['입력용.xlsx 를 함께 올려 주세요.'] : []),
         ...(state.cfg && !state.datasets.length ? ['ERP 계약·매출 파일을 함께 올려 주세요.'] : []),
         ...(state.res?.empty ? state.res.warnings : [])]),
-      el('div', { class: 'note', text: '파일은 이 PC의 브라우저 안에서만 읽습니다. 인터넷으로 전송되지 않으며, 창을 닫으면 사라집니다.' }));
+      el('div', { class: 'note', text: "파일은 이 PC의 브라우저 안에서만 읽고 인터넷으로 보내지 않습니다. 창을 닫으면 사라지며, 화면 위쪽 '이 PC에 저장'을 켜면 다음에 열 때 자동으로 다시 불러옵니다." }));
     box.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('over'); });
     box.addEventListener('dragleave', () => box.classList.remove('over'));
     box.addEventListener('drop', (e) => { e.preventDefault(); box.classList.remove('over'); loadFiles([...e.dataTransfer.files]); });
@@ -1366,7 +1461,7 @@ const Model = (() => {
         el('tbody', {}, state.datasets.map((d) => {
           const sel = el('select', { 'aria-label': '기준월' }, el('option', { value: '', text: '(미지정)' }),
             monthOptions.map((m) => el('option', { value: m, selected: d.month === m, text: monthLabel(m) })));
-          sel.addEventListener('change', () => { d.month = sel.value || null; rebuild(); });
+          sel.addEventListener('change', () => { d.month = sel.value || null; rebuild(); if (state.persist) persist(); });
           return el('tr', {}, el('td', { text: d.fileName }), el('td', { text: d.sheetName }), el('td', { text: d.kind === 'contract' ? '계약·매출' : '미수금' }),
             el('td', {}, sel), el('td', { text: d.asOf || '-' }), el('td', { class: 'num', text: fmt(d.rows.length) }), el('td', { class: 'num', text: d.noId ? fmt(d.noId) : '-' }));
         }))))));
@@ -1419,6 +1514,7 @@ const Model = (() => {
   }
 
   render();
+  restore();
   window.__dashboard = { state, loadFiles };
 })();
 
