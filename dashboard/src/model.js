@@ -89,7 +89,7 @@ const Model = (() => {
     const cfg = {
       company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100,
       buOrder: [], plans: {}, buMap: new Map(), catMap: new Map(),
-      people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(),
+      people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(), access: [],
       problems: [],
     };
     for (const r of await t('설정', ['항목', '값'])) {
@@ -154,6 +154,13 @@ const Model = (() => {
       const m = monthOf(r, '전년대비사유'); if (!m || !text(r.get('사유'))) continue;
       const c = text(r.get('중분류'));
       cfg.yoyReasons.set(`${m}|${text(r.get('본부')) || TOTAL}|${!c || c === '합계' ? TOTAL : c}`, text(r.get('사유')));
+    }
+    // 서버 버전 조회 권한: 이메일 · 본부(쉼표로 여러 개, '전체'는 모든 본부) · 역할(관리자/조회)
+    for (const r of await t('권한', ['이메일', '본부'])) {
+      const email = text(r.get('이메일')).toLowerCase();
+      if (!email) continue;
+      const bus = text(r.get('본부')).split(',').map((x) => x.trim()).filter(Boolean);
+      cfg.access.push({ email, all: bus.includes(TOTAL), bus: bus.filter((x) => x !== TOTAL), admin: text(r.get('역할')) === '관리자' });
     }
     if (!cfg.buOrder.length) cfg.problems.push("입력용 '사업계획' 시트에 본부가 없습니다.");
     return cfg;
@@ -484,6 +491,20 @@ const Model = (() => {
     };
   }
 
+  // ---- 설정값 주고받기(서버 버전) -----------------------------------------
+  // Map 은 JSON 으로 보낼 수 없으므로 [키, 값] 배열로 바꾼다.
+  function cfgToPlain(cfg) {
+    return { ...cfg, buMap: [...cfg.buMap], catMap: [...cfg.catMap], yoyReasons: [...cfg.yoyReasons],
+      reasons: Object.fromEntries(Object.entries(cfg.reasons).map(([m, mp]) => [m, [...mp]])) };
+  }
+  function cfgFromPlain(p) {
+    const pairs = (v) => (Array.isArray(v) ? v.filter((x) => Array.isArray(x) && x.length === 2) : []);
+    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, buOrder: [], plans: {}, people: {}, fund: {},
+      prev: {}, arManual: {}, gijang: [], access: [], problems: [], ...p,
+      buMap: new Map(pairs(p.buMap)), catMap: new Map(pairs(p.catMap)), yoyReasons: new Map(pairs(p.yoyReasons)),
+      reasons: Object.fromEntries(Object.entries(p.reasons || {}).map(([m, v]) => [m, new Map(pairs(v))])) };
+  }
+
   // ---- 마감(확정) 자료 ----------------------------------------------------
   // 불러온 월별 자료 중 필요한 칸만 JSON 한 파일로 묶는다. 다시 올리면 그 달들은 확정(locked)으로 취급한다.
   const SNAP_TYPE = '실적대시보드-마감자료';
@@ -529,5 +550,5 @@ const Model = (() => {
     return { datasets: out, upto: parseMonth(o.upto), createdAt: text(o.createdAt) };
   }
 
-  return { TOTAL, UNMAPPED, PEOPLE, isInputBook, readInput, readDataBook, build, exportSnapshot, readSnapshot, monthLabel, parseMonth, addMonths };
+  return { TOTAL, UNMAPPED, PEOPLE, isInputBook, readInput, readDataBook, build, exportSnapshot, readSnapshot, cfgToPlain, cfgFromPlain, norm, monthLabel, parseMonth, addMonths };
 })();

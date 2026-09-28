@@ -85,6 +85,10 @@ node tests/verify.mjs expected.json 입력용.xlsx 작업파일.xlsx ...   # 숫
 - `vendor/`: Chart.js 4.4.4, chartjs-plugin-datalabels 2.2.0 (MIT)
 - 실제 실적 데이터(엑셀, CSV, expected.json)는 저장소에 올리지 않습니다(`.gitignore`).
 
+## 회사 서버(NAS) 버전
+
+`server/` 폴더 — 설치·SSO·권한 관리 방법은 [server/README.md](server/README.md).
+
 ## 다음 단계
 
 - 경영위원 공유: 사내 서버에 올려 회사 계정(M365) 로그인과 본부별 권한을 붙이거나, Power BI Pro로 옮기기

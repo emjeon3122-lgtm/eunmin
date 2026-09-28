@@ -1,0 +1,17 @@
+# NAS(Container Manager / Container Station)에서 이 파일로 실행한다.
+# 설정값은 같은 폴더의 .env 파일에 넣는다(.env.example 참고). .env 는 절대 공유하지 않는다.
+services:
+  dashboard:
+    build: .
+    image: silgeok-dashboard:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data        # 실적 자료가 저장되는 곳. NAS 백업 대상에 넣는다.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true

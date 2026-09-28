@@ -79,6 +79,8 @@ button { font: inherit; color: inherit; }
 .seg button:disabled { opacity: 0.35; cursor: default; }
 
 .warnings { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; }
+.notice { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; }
+.notice ul { margin: 4px 0 0; padding-left: 18px; }
 .warnings ul { margin: 4px 0 0; padding-left: 18px; }
 
 /* 대시보드 그리드 */
