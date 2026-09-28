@@ -1,15 +1,17 @@
-# NAS(Container Manager / Container Station)에서 이 파일로 실행한다.
-# 설정값은 같은 폴더의 .env 파일에 넣는다(.env.example 참고). .env 는 절대 공유하지 않는다.
+# Synology Container Manager 에서 이 파일로 실행한다(프로젝트 › 생성 › 이 폴더 선택).
+# 이 NAS 는 컨테이너 간 bridge 통신이 안 되므로 host 네트워크로 띄운다.
+# 앱은 127.0.0.1:7020(http)만 연다. 외부 접속은 DSM 역방향 프록시 https 7021 → http://127.0.0.1:7020.
+# 설정값은 같은 폴더의 .env 에 넣는다(.env.example 참고). .env 는 공유하지 않는다.
 services:
   dashboard:
     build: .
     image: silgeok-dashboard:latest
+    container_name: silgeok-dashboard
     restart: unless-stopped
+    network_mode: host
     env_file: .env
-    ports:
-      - "${HOST_PORT:-8080}:8080"
     volumes:
-      - ./data:/data        # 실적 자료가 저장되는 곳. NAS 백업 대상에 넣는다.
+      - ./data:/data          # 실적 자료·변경 기록·자동 백업이 저장되는 곳
     read_only: true
     tmpfs:
       - /tmp

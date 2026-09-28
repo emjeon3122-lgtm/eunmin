@@ -35,14 +35,36 @@ function cookie(name, value, { maxAge, secure, sameSite = 'Lax', path = '/' } = 
     secure ? 'Secure' : null, maxAge != null ? `Max-Age=${maxAge}` : null].filter(Boolean).join('; ');
 }
 
-function createSessions(ttlHours) {
-  const sessions = new Map();
+// 세션은 SESSION_SECRET 으로 암호화한 쿠키에 담는다(AES-256-GCM). 서버를 다시 켜도 로그인이 유지된다.
+// 로그아웃한 세션은 만료 전까지 메모리의 폐기 목록으로 막는다.
+function createSessions(ttlHours, secret) {
+  if (!secret || String(secret).length < 32) throw new Error('SESSION_SECRET 은 32자 이상이어야 합니다 (예: openssl rand -base64 48).');
+  const key = crypto.createHash('sha256').update(String(secret)).digest();
   const ttl = ttlHours * 3600 * 1000;
-  setInterval(() => { const now = Date.now(); for (const [k, v] of sessions) if (v.exp < now) sessions.delete(k); }, 10 * 60 * 1000).unref();
+  const revoked = new Map(); // 토큰 해시 → 만료 시각
+  const hashOf = (t) => crypto.createHash('sha256').update(t).digest('base64url');
+  setInterval(() => { const now = Date.now(); for (const [k, exp] of revoked) if (exp < now) revoked.delete(k); }, 10 * 60 * 1000).unref();
   return {
-    create(email, name) { const id = random(); sessions.set(id, { email, name, exp: Date.now() + ttl }); return id; },
-    get(id) { const s = id && sessions.get(id); if (!s || s.exp < Date.now()) return null; return s; },
-    destroy(id) { sessions.delete(id); },
+    create(email, name, roles = []) {
+      const iv = crypto.randomBytes(12);
+      const c = crypto.createCipheriv('aes-256-gcm', key, iv);
+      const body = Buffer.concat([c.update(JSON.stringify({ e: email, n: name, r: roles, x: Date.now() + ttl }), 'utf8'), c.final()]);
+      return b64url(Buffer.concat([iv, body, c.getAuthTag()]));
+    },
+    get(token) {
+      if (!token || typeof token !== 'string' || token.length > 4096 || revoked.has(hashOf(token))) return null;
+      try {
+        const raw = Buffer.from(token, 'base64url');
+        const d = crypto.createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12));
+        d.setAuthTag(raw.subarray(raw.length - 16));
+        const s = JSON.parse(Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]).toString('utf8'));
+        if (typeof s.x !== 'number' || s.x < Date.now()) return null;
+        return { email: s.e, name: s.n, roles: Array.isArray(s.r) ? s.r : [], exp: s.x };
+      } catch {
+        return null; // 위조·손상된 쿠키
+      }
+    },
+    destroy(token) { const s = this.get(token); if (s) revoked.set(hashOf(token), s.exp); },
     maxAgeSeconds: Math.floor(ttl / 1000),
   };
 }
@@ -58,7 +80,7 @@ function createLimiter({ max = 10, windowMs = 15 * 60 * 1000 } = {}) {
 }
 
 // ---- OIDC (Authorization Code + PKCE) ---------------------------------------
-function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, fetchImpl = fetch }) {
+function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, allowedDomains = [], fetchImpl = fetch }) {
   let discovery = null; let discoveredAt = 0;
   let jwks = null;
   const pending = new Map(); // state → { nonce, verifier, exp }
@@ -127,7 +149,9 @@ function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, fet
       const claims = await verifyIdToken(tokens.id_token, p.nonce);
       const email = String(claims.email || claims.preferred_username || claims.upn || '').toLowerCase();
       if (!email) throw new Error('계정 이메일을 확인할 수 없습니다.');
-      return { email, name: String(claims.name || email) };
+      if (allowedDomains.length && !allowedDomains.includes(email.split('@').pop())) throw new Error('허용된 회사 계정이 아닙니다.');
+      const roles = Array.isArray(claims.roles) ? claims.roles.map(String) : [];
+      return { email, name: String(claims.name || email), roles };
     },
   };
 }

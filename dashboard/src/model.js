@@ -487,7 +487,7 @@ const Model = (() => {
     }
 
     return {
-      empty: false, warnings, gijangFor, gijangSource, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
+      empty: false, warnings, gijangFor, gijangSource, buOf, catOf, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
       loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
@@ -545,11 +545,13 @@ const Model = (() => {
       const manual = (Array.isArray(v.contract?.manual) ? v.contract.manual : []).filter((x) => x && typeof x === 'object')
         .map((x) => ({ 사업부: text(x.사업부), 계약구분: text(x.계약구분) || '기장', 계약: num(x.계약), 매출: num(x.매출), 메모: text(x.메모) }));
       if (c) out.push({ kind: 'contract', fileName, sheetName: `마감 ${monthLabel(m)} (${text(v.contract.fileName)})`, rows: c, month: m,
-        asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: true });
+        asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: v.locked !== false });
       const a = unpack(v.ar, A_FIELDS);
-      if (a) out.push({ kind: 'ar', fileName, sheetName: `마감 ${monthLabel(m)} 미수금`, rows: a, month: m, locked: true });
+      if (a) out.push({ kind: 'ar', fileName, sheetName: `마감 ${monthLabel(m)} 미수금`, rows: a, month: m, locked: v.locked !== false });
     }
-    return { datasets: out, upto: parseMonth(o.upto), createdAt: text(o.createdAt) };
+    // 서버 백업 파일에는 입력용 설정도 들어 있다(kind: 'backup').
+    const input = o.input && typeof o.input === 'object' && o.input.cfg && typeof o.input.cfg === 'object' ? { fileName: text(o.input.fileName), cfg: o.input.cfg } : null;
+    return { datasets: out, upto: parseMonth(o.upto), createdAt: text(o.createdAt), input };
   }
 
   return { TOTAL, UNMAPPED, PEOPLE, isInputBook, readInput, readDataBook, build, exportSnapshot, readSnapshot, cfgToPlain, cfgFromPlain, norm, monthLabel, parseMonth, addMonths };

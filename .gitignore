@@ -3,3 +3,5 @@ dashboard/**/*.xlsx
 dashboard/**/*.xlsm
 dashboard/**/*.csv
 dashboard/**/expected*.json
+.env
+**/.env

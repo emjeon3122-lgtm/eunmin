@@ -101,7 +101,12 @@
     for (const f of files) {
       try {
         const buf = await f.arrayBuffer();
-        if (/\.json$/i.test(f.name)) { datasets.push(...Model.readSnapshot(new TextDecoder().decode(buf), f.name).datasets); continue; }
+        if (/\.json$/i.test(f.name)) {
+          const snap = Model.readSnapshot(new TextDecoder().decode(buf), f.name);
+          datasets.push(...snap.datasets);
+          if (snap.input && !cfg) { cfg = Model.cfgFromPlain(snap.input.cfg); cfg.fileName = `${snap.input.fileName} (백업에서 복구)`; }
+          continue;
+        }
         const book = await XlsxReader.open(buf);
         if (Model.isInputBook(book)) { cfg = await Model.readInput(book); cfg.fileName = f.name; continue; }
         const found = await Model.readDataBook(book, f.name);
@@ -151,6 +156,7 @@
         const buf = await f.arrayBuffer();
         if (/\.json$/i.test(f.name)) {
           const snap = Model.readSnapshot(new TextDecoder().decode(buf), f.name);
+          if (snap.input && !state.cfg) state.cfg = Model.cfgFromPlain(snap.input.cfg); // 서버 백업 파일이면 입력용 설정도 복구
           state.datasets = state.datasets.filter((d) => d.fileName !== f.name);
           state.datasets.push(...snap.datasets);
           state.files = state.files.filter((x) => x.name !== f.name);
@@ -770,10 +776,8 @@
         el('span', { text: '확정할 마지막 월' }), upto,
         el('button', { class: 'btn primary', disabled: !unlocked.length, text: '이 달까지 확정(🔒)', onclick: () => adminAction('/api/admin/lock', { upto: upto.value },
           `${monthLabel(upto.value)}까지 아직 확정되지 않은 달을 모두 확정합니다. 확정된 달은 같은 달 파일을 다시 올려도 바뀌지 않습니다.`) }),
-        el('button', { class: 'btn', text: '백업 파일 받기(마감자료)', onclick: () => {
-          const last = meta.length ? meta[meta.length - 1].month : res.latest;
-          download(`실적대시보드_백업_${monthLabel(last).replace('월', '')}.json`, Model.exportSnapshot(state.datasets, last), 'application/json');
-        } })),
+        el('a', { class: 'btn', href: '/api/admin/backup', text: '백업 파일 받기' }),
+        el('button', { class: 'btn', text: '계약 원장 CSV(엑셀용)', onclick: () => exportLedger(res) })),
       el('div', { class: 'table-wrap' }, el('table', {},
         el('thead', {}, el('tr', {}, ['월', '상태', '계약·매출 파일', '건수', '미수금 파일', '마지막 변경', '관리'].map((h) => el('th', { text: h })))),
         el('tbody', {}, meta.map((x) => el('tr', {},
@@ -784,7 +788,19 @@
           el('td', {}, x.locked
             ? el('button', { class: 'btn', text: '확정 풀기', onclick: () => adminAction('/api/admin/unlock', { month: x.month }, `${monthLabel(x.month)} 확정을 풀까요? 풀면 같은 달 파일을 올릴 때 덮어쓰게 됩니다.`) })
             : el('button', { class: 'btn', text: '삭제', onclick: () => adminAction('/api/admin/delete', { month: x.month }, `${monthLabel(x.month)} 자료를 서버에서 지울까요?`) }))))))),
-      el('p', { class: 'muted', text: "기준월은 ERP 등록일자 중 가장 늦은 날짜로 자동 판단합니다. 잘못 들어간 달은 '삭제' 후 다시 올리세요. 백업 파일은 서버 자료 전체를 담으므로 안전한 곳에 보관하세요." })));
+      el('p', { class: 'muted', text: "기준월은 ERP 등록일자 중 가장 늦은 날짜로 자동 판단합니다. 잘못 들어간 달은 '삭제' 후 다시 올리세요. 서버는 매일 자동 백업을 만들고, '백업 파일 받기'로 지금 상태를 내려받을 수 있습니다. 백업 파일을 '자료 올리기'로 올리면 월별 자료·확정 상태·입력용 설정이 그대로 복구됩니다. 백업 파일에는 실적 전체가 들어 있으니 안전한 곳에 보관하세요." })));
+  }
+
+  // 계약 원장: 불러온 모든 달의 계약 건별 금액(원)과 수기 행을 CSV 한 파일로 내보낸다(엑셀에서 열기·보관용).
+  function exportLedger(res) {
+    const rows = [];
+    for (const m of [...res.loadedMonths].sort()) {
+      const d = res.contracts.get(m);
+      const locked = d.locked ? 'Y' : '';
+      d.rows.forEach((r) => rows.push([monthLabel(m), locked, res.buOf(r.사업부), r.사업부, r.no, r.회사명, r.보고서명, r.계약구분, res.catOf(r.계약구분), r.상태, r.체결일, r.신규여부, r.계약, r.매출, 'ERP']));
+      res.gijangFor(m).forEach((g) => rows.push([monthLabel(m), locked, res.buOf(g.사업부), g.사업부, '', '', g.메모, g.계약구분, res.catOf(g.계약구분), '', '', '', g.계약, g.매출, '수기']));
+    }
+    download(`계약원장_${new Date().toISOString().slice(0, 10)}.csv`, toCsv(['월', '확정', '본부', '사업부', '계약번호', '회사명', '보고서명', '계약구분', '중분류', '계약상태', '체결일', '신규여부', '계약금액(원)', '매출금액(원)', '구분'], rows));
   }
 
   function checkView(res) {

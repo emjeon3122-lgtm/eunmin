@@ -5,11 +5,12 @@
 const norm = (s) => (s == null ? '' : String(s)).replace(/\s+/g, '');
 const TOTAL = '전체';
 
-// adminEmails: 환경변수로 지정한 관리자(처음 설정용). 그 밖에는 입력용 '권한' 시트를 따른다.
-function resolveUser(email, input, adminEmails) {
+// 관리자: 환경변수 ADMIN_EMAILS, 또는 Entra 앱 역할(OIDC_ADMIN_ROLE, 예: Admin)을 받은 계정.
+// 그 밖의 사람은 입력용 '권한' 시트를 따른다.
+function resolveUser(email, input, { adminEmails = [], roles = [], adminRole = '' } = {}) {
   const e = String(email || '').toLowerCase();
   if (!e) return null;
-  if (adminEmails.includes(e)) return { email: e, admin: true, all: true, bus: [] };
+  if (adminEmails.includes(e) || (adminRole && roles.includes(adminRole))) return { email: e, admin: true, all: true, bus: [] };
   const a = (input?.cfg?.access || []).find((x) => x.email === e);
   if (!a) return null;
   return { email: e, admin: a.admin, all: a.all || a.admin, bus: a.bus };

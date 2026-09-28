@@ -10,14 +10,20 @@ const sanitize = require('./lib/sanitize');
 const { createStorage } = require('./lib/storage');
 const { resolveUser, filterFor } = require('./lib/access');
 const auth = require('./lib/auth');
+const { buildBackup, scheduleBackups } = require('./lib/backup');
 
 // ---- 설정 -------------------------------------------------------------------
 const env = process.env;
 const readSecret = (name) => (env[`${name}_FILE`] ? fs.readFileSync(env[`${name}_FILE`], 'utf8').trim() : env[name] || '');
 const config = {
-  port: Number(env.PORT || 8080),
-  host: env.HOST || '0.0.0.0',
+  port: Number(env.PORT || 7020),
+  // 기본은 NAS 안에서만 받는다(역방향 프록시가 https → 127.0.0.1:PORT 로 넘겨줌).
+  host: env.HOST || '127.0.0.1',
   dataDir: env.DATA_DIR || path.join(__dirname, 'data'),
+  sessionSecret: readSecret('SESSION_SECRET'),
+  allowedDomains: (env.ALLOWED_EMAIL_DOMAINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+  adminRole: env.OIDC_ADMIN_ROLE || '',
+  backup: { dir: env.BACKUP_DIR || '', hour: Number(env.BACKUP_HOUR || 3), keepDays: Number(env.BACKUP_KEEP_DAYS || 30) },
   publicUrl: (env.PUBLIC_URL || '').replace(/\/$/, ''),
   authMode: env.AUTH_MODE || 'local',
   adminEmails: (env.ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
@@ -26,20 +32,21 @@ const config = {
   sessionHours: Number(env.SESSION_HOURS || 8),
   maxUploadBytes: Number(env.MAX_UPLOAD_MB || 80) * 1024 * 1024,
   trustProxy: env.TRUST_PROXY === 'true',
-  oidc: { issuer: env.OIDC_ISSUER || '', clientId: env.OIDC_CLIENT_ID || '', clientSecret: readSecret('OIDC_CLIENT_SECRET'), tenantId: env.OIDC_TENANT_ID || '' },
+  // 발급자 주소를 따로 주지 않으면 Entra ID 테넌트 ID 로 만든다.
+  oidc: { issuer: env.OIDC_ISSUER || (env.OIDC_TENANT_ID ? `https://login.microsoftonline.com/${env.OIDC_TENANT_ID}/v2.0` : ''), clientId: env.OIDC_CLIENT_ID || '', clientSecret: readSecret('OIDC_CLIENT_SECRET'), tenantId: env.OIDC_TENANT_ID || '' },
 };
 if (!config.adminEmails.length) throw new Error('ADMIN_EMAILS 환경변수에 관리자 이메일을 하나 이상 넣어 주세요.');
 if (config.authMode === 'local' && !config.localPasswordHash) throw new Error('AUTH_MODE=local 이면 LOCAL_ADMIN_PASSWORD_HASH 가 필요합니다 (node tools/hash-password.js).');
 if (config.authMode === 'oidc' && (!config.oidc.issuer || !config.oidc.clientId || !config.oidc.clientSecret || !config.publicUrl)) {
-  throw new Error('AUTH_MODE=oidc 이면 OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, PUBLIC_URL 이 필요합니다.');
+  throw new Error('AUTH_MODE=oidc 이면 OIDC_TENANT_ID(또는 OIDC_ISSUER), OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, PUBLIC_URL 이 필요합니다.');
 }
 if (!['local', 'oidc'].includes(config.authMode)) throw new Error('AUTH_MODE 는 local 또는 oidc 입니다.');
 
 const storage = createStorage(config.dataDir);
-const sessions = auth.createSessions(config.sessionHours);
+const sessions = auth.createSessions(config.sessionHours, config.sessionSecret);
 const limiter = auth.createLimiter();
 const oidc = config.authMode === 'oidc'
-  ? auth.createOidc({ ...config.oidc, redirectUri: `${config.publicUrl}/auth/callback` })
+  ? auth.createOidc({ ...config.oidc, allowedDomains: config.allowedDomains, redirectUri: `${config.publicUrl}/auth/callback` })
   : null;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const indexHtml = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
@@ -104,7 +111,7 @@ function sameOrigin(req) {
 function currentUser(req) {
   const s = sessions.get(auth.parseCookies(req.headers.cookie).sid);
   if (!s) return { session: null, user: null };
-  return { session: s, user: resolveUser(s.email, storage.load().input, config.adminEmails) };
+  return { session: s, user: resolveUser(s.email, storage.load().input, { adminEmails: config.adminEmails, roles: s.roles, adminRole: config.adminRole }) };
 }
 function startSession(res, email, name, to = '/') {
   const id = sessions.create(email, name);
@@ -204,7 +211,7 @@ async function handle(req, res) {
     try {
       const who = await oidc.finish(url.searchParams.get('code') || '', state);
       storage.audit({ by: who.email, action: 'login', ip: clientIp(req) });
-      const id = sessions.create(who.email, who.name);
+      const id = sessions.create(who.email, who.name, who.roles);
       return redirect(res, '/', { 'Set-Cookie': [auth.cookie('sid', id, { maxAge: sessions.maxAgeSeconds, secure: config.cookieSecure }), auth.cookie('oidc_state', '', { maxAge: 0, secure: config.cookieSecure })] });
     } catch (e) {
       return page(req, res, 401, '로그인 오류', `<h1>로그인 오류</h1><p>${escapeHtml(e.message)}</p><a class="btn" href="/auth/login">다시 로그인</a>`);
@@ -240,6 +247,12 @@ async function handle(req, res) {
     const { input, months } = storage.load();
     return json(req, res, 200, { user: { email: user.email, name: session.name, admin: user.admin, all: user.all, bus: user.bus }, input: input && user.admin ? { fileName: input.fileName, updatedAt: input.updatedAt, by: input.by } : null, ...filterFor(user, input, months) });
   }
+  if (route === 'GET /api/admin/backup') {
+    if (!user.admin) return json(req, res, 403, { error: '관리자만 할 수 있습니다.' });
+    storage.audit({ by: user.email, action: 'backup-download' });
+    res.setHeader('Content-Disposition', `attachment; filename="dashboard-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+    return send(req, res, 200, buildBackup(storage.load()), 'application/json; charset=utf-8');
+  }
   const adminMatch = url.pathname.match(/^\/api\/admin\/([a-z]+)$/);
   if (req.method === 'POST' && adminMatch && adminRoutes[adminMatch[1]]) {
     if (!user.admin) return json(req, res, 403, { error: '관리자만 할 수 있습니다.' });
@@ -257,4 +270,5 @@ const server = http.createServer((req, res) => {
   });
 });
 server.requestTimeout = 5 * 60 * 1000;
+scheduleBackups({ ...config.backup, dir: config.backup.dir || path.join(config.dataDir, 'backups'), load: storage.load, log: (m) => console.log(m) });
 server.listen(config.port, config.host, () => console.log(`실적 대시보드 서버: http://${config.host}:${config.port} (로그인 방식: ${config.authMode})`));

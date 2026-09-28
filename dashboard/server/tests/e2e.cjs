@@ -18,10 +18,11 @@ const SERVER = path.join(__dirname, '..', 'server.js');
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-'));
 const ADMIN = 'admin@test.local';
 const PASSWORD = crypto.randomBytes(12).toString('base64url');
+const SESSION_SECRET = crypto.randomBytes(48).toString('base64');
 
 const running = new Set();
 function startServer(port, extraEnv) {
-  const p = spawn(process.execPath, [SERVER], { env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir, ADMIN_EMAILS: ADMIN, COOKIE_SECURE: 'false', ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const p = spawn(process.execPath, [SERVER], { env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir, ADMIN_EMAILS: ADMIN, COOKIE_SECURE: 'false', SESSION_SECRET, BACKUP_HOUR: '0', ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] });
   running.add(p); p.on('exit', () => running.delete(p));
   p.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
   return new Promise((resolve, reject) => {
@@ -61,7 +62,7 @@ function startIdp(port, clientId) {
     if (u.pathname === '/jwks') { res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify({ keys: [jwk] })); }
     if (u.pathname === '/authorize') {
       const code = crypto.randomBytes(8).toString('hex');
-      codes.set(code, { nonce: u.searchParams.get('nonce'), challenge: u.searchParams.get('code_challenge'), who });
+      codes.set(code, { nonce: u.searchParams.get('nonce'), challenge: u.searchParams.get('code_challenge'), who: who.email, roles: who.roles });
       res.writeHead(302, { Location: `${u.searchParams.get('redirect_uri')}?code=${code}&state=${encodeURIComponent(u.searchParams.get('state'))}` }); return res.end();
     }
     if (u.pathname === '/token') {
@@ -71,11 +72,11 @@ function startIdp(port, clientId) {
       if (!c || !pkceOk || f.get('client_id') !== clientId) { res.writeHead(400); return res.end('{}'); }
       const now = Math.floor(Date.now() / 1000);
       res.setHeader('content-type', 'application/json');
-      return res.end(JSON.stringify({ id_token: sign({ iss: issuer, aud: clientId, exp: now + 600, iat: now, nonce: c.nonce, tid: 'tenant-1', preferred_username: c.who, name: c.who }) }));
+      return res.end(JSON.stringify({ id_token: sign({ iss: issuer, aud: clientId, exp: now + 600, iat: now, nonce: c.nonce, tid: 'tenant-1', preferred_username: c.who, name: c.who, ...(c.roles ? { roles: c.roles } : {}) }) }));
     }
     res.writeHead(404); res.end();
   });
-  return new Promise((r) => srv.listen(port, '127.0.0.1', () => r({ srv, setUser: (e) => { who = e; }, issuer })));
+  return new Promise((r) => srv.listen(port, '127.0.0.1', () => r({ srv, setUser: (email, roles) => { who = { email, roles }; }, issuer })));
 }
 
 (async () => {
@@ -108,11 +109,22 @@ function startIdp(port, clientId) {
   await fc2.setFiles([dataFiles[dataFiles.length - 1]]);
   await page.waitForFunction(() => window.__dashboard.state.errors.some((e) => e.includes('확정된 달')), null, { timeout: 60000 });
   console.log('확정된 달 보호 확인');
+  // 서버를 다시 켜도(같은 SESSION_SECRET) 로그인 유지
+  await stop(srv);
+  srv = await startServer(18080, { AUTH_MODE: 'local', LOCAL_ADMIN_PASSWORD_HASH: hashPassword(PASSWORD) });
+  await page.reload(); await page.waitForSelector('.grid', { timeout: 30000 });
+  console.log('재시작 후 로그인 유지');
+  const backups = fs.readdirSync(path.join(dataDir, 'backups'));
+  assert.ok(backups.some((f) => /^dashboard-backup-\d{8}\.json$/.test(f)), '자동 백업 파일 생성');
+  const backupText = await page.evaluate(() => fetch('/api/admin/backup').then((r) => r.text()));
+  const backupFile = path.join(os.tmpdir(), `dash-backup-${process.pid}.json`);
+  fs.writeFileSync(backupFile, backupText);
+  console.log('자동 백업·백업 내려받기 확인');
   await stop(srv);
 
   // 3) 재시작 후에도 자료 유지 + OIDC 로그인 + 권한 필터
   const idp = await startIdp(18090, 'client-1');
-  srv = await startServer(18081, { AUTH_MODE: 'oidc', OIDC_ISSUER: idp.issuer, OIDC_CLIENT_ID: 'client-1', OIDC_CLIENT_SECRET: 'secret', OIDC_TENANT_ID: 'tenant-1', PUBLIC_URL: 'http://127.0.0.1:18081' });
+  srv = await startServer(18081, { AUTH_MODE: 'oidc', ALLOWED_EMAIL_DOMAINS: 'test.local', OIDC_ADMIN_ROLE: 'Admin', OIDC_ISSUER: idp.issuer, OIDC_CLIENT_ID: 'client-1', OIDC_CLIENT_SECRET: 'secret', OIDC_TENANT_ID: 'tenant-1', PUBLIC_URL: 'http://127.0.0.1:18081' });
   for (const [email, bu] of [[ADMIN, null], ['busan@test.local', '부산']]) {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const p = await ctx.newPage(); p.on('pageerror', (e) => errs.push(e.message));
@@ -136,13 +148,42 @@ function startIdp(port, clientId) {
     }
     await ctx.close();
   }
-  // 권한 없는 계정
+  // Entra 앱 역할 Admin → 관리자
+  {
+    const c = await browser.newContext(); const p = await c.newPage();
+    idp.setUser('role-admin@test.local', ['Admin']); await p.goto('http://127.0.0.1:18081/'); await p.waitForSelector('.grid');
+    assert.equal(await p.evaluate(() => window.__dashboard.state.user.admin), true, 'Admin 역할은 관리자');
+    await c.close(); console.log('Entra 역할 Admin → 관리자');
+  }
+  // 권한 없는 계정 / 허용하지 않는 도메인
   const ctx = await browser.newContext(); const p = await ctx.newPage();
   idp.setUser('nobody@test.local'); await p.goto('http://127.0.0.1:18081/');
   assert.ok((await p.content()).includes('권한 없음'), '권한 없는 계정 차단');
   assert.equal(await p.evaluate(() => fetch('/api/data').then((r) => r.status)), 403);
-  console.log('권한 없는 계정 차단');
-  await stop(srv); idp.srv.close(); await browser.close();
+  await ctx.close();
+  const ctx2 = await browser.newContext(); const p2 = await ctx2.newPage();
+  idp.setUser('someone@other.com'); await p2.goto('http://127.0.0.1:18081/');
+  assert.ok((await p2.content()).includes('허용된 회사 계정이 아닙니다'), '다른 도메인 차단');
+  await ctx2.close();
+  console.log('권한 없는 계정·다른 도메인 차단');
+  await stop(srv); idp.srv.close();
+
+  // 4) 빈 서버에 백업 파일만 올려 복구
+  const restoreDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-restore-'));
+  srv = await startServer(18082, { AUTH_MODE: 'local', LOCAL_ADMIN_PASSWORD_HASH: hashPassword(PASSWORD), DATA_DIR: restoreDir });
+  const rc = await browser.newContext({ viewport: { width: 1440, height: 900 } }); const rp = await rc.newPage();
+  rp.on('pageerror', (e) => errs.push(e.message));
+  await rp.goto('http://127.0.0.1:18082/auth/login');
+  await rp.fill('#e', ADMIN); await rp.fill('#p', PASSWORD); await rp.click('button[type=submit]');
+  await rp.waitForSelector('.drop');
+  const [fc3] = await Promise.all([rp.waitForEvent('filechooser'), rp.click('text=파일 선택')]);
+  await fc3.setFiles([backupFile]); await rp.waitForSelector('.grid', { timeout: 60000 });
+  ok += compare(await metricsOf(rp, expected), expected, 'restore');
+  const lockedAfter = await rp.evaluate(() => window.__dashboard.state.monthMeta.filter((x) => x.locked).map((x) => x.month));
+  assert.ok(lockedAfter.includes('2026-08'), '확정 상태도 복구');
+  console.log('백업 파일로 빈 서버 복구: 숫자·확정 상태 일치');
+  await rc.close(); await stop(srv); await browser.close();
+  fs.rmSync(restoreDir, { recursive: true, force: true }); fs.rmSync(backupFile, { force: true });
   assert.deepEqual(errs, []);
   console.log(`PASS (${ok} values)`);
   fs.rmSync(dataDir, { recursive: true, force: true });
