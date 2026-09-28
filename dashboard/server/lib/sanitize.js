@@ -66,6 +66,7 @@ function config(p) {
     fyStart: fyStart >= 1 && fyStart <= 12 ? fyStart : 4,
     unit: num(p.unit) > 0 ? num(p.unit) : 1000000,
     yoyReviewMin: num(p.yoyReviewMin) >= 0 ? num(p.yoyReviewMin) : 100,
+    fundScope: p.fundScope === 'all-only' ? 'all-only' : 'everyone',
     catOrder: arr(p.catOrder, 100).map((x) => str(x, 100)),
     buOrder: arr(p.buOrder, 200).map((x) => str(x, 100)),
     plans: obj(p.plans, (k) => k === '*' || /^\d{4}$/.test(k), (v) => obj(v, anyKey, num)),

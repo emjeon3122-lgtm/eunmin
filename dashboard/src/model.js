@@ -87,7 +87,7 @@ const Model = (() => {
   async function readInput(book) {
     const t = async (name, req) => (book.sheetNames.includes(name) ? table(await book.rows(name), req) || [] : []);
     const cfg = {
-      company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100,
+      company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, fundScope: 'everyone',
       buOrder: [], plans: {}, buMap: new Map(), catMap: new Map(),
       people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(), access: [],
       problems: [],
@@ -97,6 +97,8 @@ const Model = (() => {
       if (k === '회사명') cfg.company = text(v);
       else if (k === '회계연도시작월' && num(v) >= 1 && num(v) <= 12) cfg.fyStart = num(v);
       else if (k.startsWith('금액단위') && num(v) > 0) cfg.unit = num(v);
+      // 자금·예수금 공개 범위: '모두'(기본) 또는 '전체권한자'(전체 권한이 있는 사람만)
+      else if (k.startsWith('자금')) cfg.fundScope = norm(v).includes('전체권한') ? 'all-only' : 'everyone';
       else if (k.startsWith('전년대비검토기준') && num(v) >= 0) cfg.yoyReviewMin = num(v);
       else if (k === '중분류순서') cfg.catOrder = text(v).split(',').map((s) => s.trim()).filter(Boolean);
     }

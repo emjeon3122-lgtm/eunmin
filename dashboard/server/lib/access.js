@@ -48,7 +48,8 @@ function filterFor(user, input, months) {
     plans: Object.fromEntries(Object.entries(cfg.plans).map(([fy, v]) => [fy, pickBus(v)])),
     buMap: cfg.buMap.filter(([, bu]) => allowed.has(bu)),
     people: byMonth(cfg.people), prev: byMonth(cfg.prev), arManual: byMonth(cfg.arManual),
-    fund: {}, // 자금·예수금은 법인 전체 자료이므로 전체 권한이 있는 사람에게만 보낸다
+    // 자금·예수금은 법인 전체 값이다. 입력용 '설정'에서 '전체권한자'로 정하면 전체 권한자에게만 보낸다.
+    fund: cfg.fundScope === 'all-only' ? {} : cfg.fund, fundScope: cfg.fundScope,
     gijang: cfg.gijang.filter(inScope),
     reasons: Object.fromEntries(Object.entries(cfg.reasons).map(([m, list]) => [m, list.filter(([no]) => visibleNos.has(no))])),
     yoyReasons: cfg.yoyReasons.filter(([k]) => allowed.has(k.split('|')[1])),

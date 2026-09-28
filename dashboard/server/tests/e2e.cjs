@@ -125,10 +125,10 @@ function startIdp(port, clientId) {
       const buMap = new Map(data.cfg.buMap);
       const bad = data.datasets.flatMap((d) => d.rows).filter((r) => buMap.get(String(r.사업부).replace(/\s+/g, '')) !== bu);
       assert.equal(bad.length, 0, '권한 밖 행이 내려오지 않아야 함');
-      assert.deepEqual(data.cfg.buOrder, [bu]); assert.deepEqual(data.cfg.fund, {}); assert.deepEqual(data.cfg.access, []);
+      assert.deepEqual(data.cfg.buOrder, [bu]); assert.ok(Object.keys(data.cfg.fund).length > 0, '자금·예수금은 기본적으로 모두 공개'); assert.deepEqual(data.cfg.access, []);
       assert.equal(await p.locator('.tab:has-text("검증")').count(), 0, '조회자는 관리 탭 없음');
       assert.equal(await p.locator('.seg[aria-label="본부 선택"] button').allInnerTexts().then((t) => t.join(',')), bu);
-      const sub = Object.fromEntries(Object.entries(expected).map(([m, v]) => [m, { [bu]: Object.fromEntries(Object.entries(v[bu]).filter(([k]) => !/^(자금|예수금)/.test(k))) }]));
+      const sub = Object.fromEntries(Object.entries(expected).map(([m, v]) => [m, { [bu]: Object.fromEntries(Object.entries(v[bu])) }]));
       ok += compare(await metricsOf(p, sub), sub, 'oidc-busan');
       const adminCall = await p.evaluate(() => fetch('/api/admin/lock', { method: 'POST', headers: { 'x-dashboard': '1', 'content-type': 'application/json' }, body: '{"upto":"2026-08"}' }).then((r) => r.status));
       assert.equal(adminCall, 403, '조회자는 관리 기능 불가');
