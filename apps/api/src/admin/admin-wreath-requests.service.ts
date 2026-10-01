@@ -117,12 +117,14 @@ export class AdminWreathRequestsService {
       throw new InvalidStatusTransitionException('이미 취소된 신청입니다.');
     }
 
+    // 취소와 동시에 꽃집 링크도 만료시킨다(wreath-requests.service의 자진 취소와 동일).
     const updated = await this.prisma.wreathRequest.update({
       where: { id },
       data: {
         status: 'cancelled',
         cancelledReason: reason,
         cancelledAt: new Date(),
+        vendorStatusToken: null,
       },
     });
     await this.notificationsService.notifyRequester(

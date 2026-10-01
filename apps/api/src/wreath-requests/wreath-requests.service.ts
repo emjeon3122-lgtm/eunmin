@@ -161,9 +161,16 @@ export class WreathRequestsService {
         '이미 꽃집이 접수한 신청은 직접 취소할 수 없습니다. 관리자에게 문의해주세요.',
       );
     }
+    // 취소와 동시에 꽃집 링크도 만료시킨다 — 취소된 주문 내용·청첩장을 꽃집이
+    // 다시 열어볼 수 없어야 한다(배송완료 시 만료와 같은 원칙).
     const updated = await this.prisma.wreathRequest.update({
       where: { id },
-      data: { status: 'cancelled', cancelledById: requesterId, cancelledAt: new Date() },
+      data: {
+        status: 'cancelled',
+        cancelledById: requesterId,
+        cancelledAt: new Date(),
+        vendorStatusToken: null,
+      },
     });
     return { id: updated.id, status: updated.status, cancelledAt: updated.cancelledAt };
   }

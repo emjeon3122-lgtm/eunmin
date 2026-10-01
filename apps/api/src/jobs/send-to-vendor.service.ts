@@ -28,6 +28,11 @@ export class SendToVendorService {
       this.logger.error(`send-to-vendor: 신청 또는 vendor가 없습니다 (requestId=${requestId})`);
       return;
     }
+    // 발송 전에 취소됐으면 링크가 이미 만료(null)된 상태라 보내면 안 된다.
+    if (request.status !== 'submitted' || !request.vendorStatusToken) {
+      this.logger.warn(`send-to-vendor: 발송 대상 상태가 아니라 건너뜁니다 (requestId=${requestId}, status=${request.status})`);
+      return;
+    }
     const vendor = await this.prisma.vendor.findUnique({ where: { id: request.vendorId } });
     if (!vendor) {
       this.logger.error(`send-to-vendor: vendor를 찾을 수 없습니다 (vendorId=${request.vendorId})`);
