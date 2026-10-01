@@ -50,6 +50,7 @@ const oidc = config.authMode === 'oidc'
   : null;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const indexHtml = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
+const VERSION = (() => { try { return fs.readFileSync(path.join(__dirname, 'VERSION'), 'utf8').trim(); } catch { return 'unknown'; } })();
 
 // ---- 응답 도우미 --------------------------------------------------------------
 function securityHeaders(res, nonce) {
@@ -183,7 +184,7 @@ async function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   const route = `${req.method} ${url.pathname}`;
 
-  if (route === 'GET /healthz') return send(req, res, 200, 'ok', 'text/plain');
+  if (route === 'GET /healthz') return send(req, res, 200, `ok ${VERSION}`, 'text/plain');
 
   // 로그인
   if (route === 'GET /auth/login') {
@@ -271,4 +272,4 @@ const server = http.createServer((req, res) => {
 });
 server.requestTimeout = 5 * 60 * 1000;
 scheduleBackups({ ...config.backup, dir: config.backup.dir || path.join(config.dataDir, 'backups'), load: storage.load, log: (m) => console.log(m) });
-server.listen(config.port, config.host, () => console.log(`실적 대시보드 서버: http://${config.host}:${config.port} (로그인 방식: ${config.authMode})`));
+server.listen(config.port, config.host, () => console.log(`실적 대시보드 서버 ${VERSION}: http://${config.host}:${config.port} (로그인 방식: ${config.authMode})`));

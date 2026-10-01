@@ -3,6 +3,8 @@
   const { TOTAL, PEOPLE, monthLabel } = Model;
   // 서버 버전(NAS)으로 빌드하면 DASHBOARD_MODE = 'server' 가 들어간다. 없으면 PC에서 여는 파일 버전.
   const SERVER = typeof DASHBOARD_MODE !== 'undefined' && DASHBOARD_MODE === 'server';
+  const VERSION = typeof DASHBOARD_VERSION !== 'undefined' ? DASHBOARD_VERSION : '개발';
+  const footer = () => el('div', { class: 'foot', text: `실적 대시보드 버전 ${VERSION}${SERVER ? ' · 회사 서버' : ' · PC 파일'}` });
   const state = { user: null, monthMeta: [], inputMeta: null, notice: [], busy: '', cfg: null, datasets: [], files: [], persist: false, savedAt: null, res: null, errors: [], sel: { month: null, bu: TOTAL, cat: null }, tab: 'dash', mom: { kind: '전체', q: '' }, field: '계약', yoyList: '올해' };
   const charts = [];
   const pendingCharts = []; // 캔버스가 화면에 붙은 뒤에 그려야 크기가 맞는다
@@ -250,7 +252,7 @@
     charts.splice(0).forEach((c) => c.destroy());
     app.replaceChildren();
     const ready = state.res && !state.res.empty;
-    if (!ready) { app.append(SERVER && !state.user?.admin ? emptyViewer() : dropScreen()); return; }
+    if (!ready) { app.append(SERVER && !state.user?.admin ? emptyViewer() : dropScreen(), footer()); return; }
     const res = state.res; const cfg = state.cfg;
     const cur = res.metric(state.sel.month, state.sel.bu);
     app.append(...[
@@ -279,6 +281,7 @@
     ].filter(Boolean));
     const view = { dash: dashboard, mom: momView, yoy: yoyView, summary: summaryView, check: checkView }[state.tab];
     app.append(view(res, cur));
+    app.append(footer());
     pendingCharts.splice(0).forEach((draw) => draw());
   }
 

@@ -4,7 +4,7 @@ WORKDIR /app
 COPY lib ./lib
 COPY public ./public
 COPY tools ./tools
-COPY server.js ./
+COPY server.js VERSION ./
 ENV NODE_ENV=production DATA_DIR=/data PORT=7020 HOST=127.0.0.1
 RUN mkdir -p /data && chown node:node /data
 USER node

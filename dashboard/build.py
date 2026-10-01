@@ -2,6 +2,7 @@
 
 - dist/실적대시보드.html   : PC에서 더블클릭으로 여는 버전(외부 접속 차단 CSP 포함)
 - server/public/index.html : 회사 서버(NAS) 버전. CSP 는 서버가 요청마다 nonce 와 함께 보낸다.
+버전은 dashboard/VERSION 파일 한 줄(예: 2026.10.01)이며 화면 아래와 서버 /healthz 에 표시된다.
 사용법: python build.py
 """
 from pathlib import Path
@@ -17,6 +18,7 @@ SCRIPTS = [
 ]
 OUT = ROOT / 'dist' / '실적대시보드.html'
 SERVER_OUT = ROOT / 'server' / 'public' / 'index.html'
+VERSION = (ROOT / 'VERSION').read_text(encoding='utf-8').strip()
 # PC 버전: 스크립트·스타일은 파일 안의 것만, 네트워크 접속은 모두 막는다.
 LOCAL_CSP = ('<!-- 외부 접속을 모두 막는다: 스크립트·스타일은 이 파일 안에 있는 것만 실행된다. -->\n'
              '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; '
@@ -44,8 +46,12 @@ def write(path: Path, text: str) -> None:
 
 
 def main() -> None:
-    write(OUT, render(LOCAL_CSP))
-    write(SERVER_OUT, render('', "const DASHBOARD_MODE = 'server';"))
+    if not VERSION.replace('.', '').replace('-', '').isalnum():
+        raise SystemExit(f'VERSION 형식 오류: {VERSION!r}')
+    version = f"const DASHBOARD_VERSION = '{VERSION}';"
+    write(OUT, render(LOCAL_CSP, version))
+    write(SERVER_OUT, render('', f"{version}\nconst DASHBOARD_MODE = 'server';"))
+    write(ROOT / 'server' / 'VERSION', VERSION + '\n')
 
 
 if __name__ == '__main__':
