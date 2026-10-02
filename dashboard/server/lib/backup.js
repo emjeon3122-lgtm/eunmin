@@ -13,7 +13,7 @@ function buildBackup({ input, months }) {
     fields, rows: d.rows.map((r) => fields.map((f) => r[f] ?? null)), manual: d.manual || [] });
   for (const [m, rec] of Object.entries(months)) {
     out[m] = { locked: !!rec.locked };
-    if (rec.contract) out[m].contract = pack(rec.contract, C_FIELDS);
+    if (rec.contract) out[m].contract = { ...pack(rec.contract, C_FIELDS), ...(rec.mapping ? { mapping: rec.mapping } : {}) };
     if (rec.ar) out[m].ar = pack(rec.ar, A_FIELDS);
   }
   const keys = Object.keys(out).sort();

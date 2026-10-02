@@ -11,6 +11,7 @@ const { createStorage } = require('./lib/storage');
 const { resolveUser, filterFor } = require('./lib/access');
 const auth = require('./lib/auth');
 const { buildBackup, scheduleBackups } = require('./lib/backup');
+const { effectiveMapping } = require('./lib/mapping');
 
 // ---- 설정 -------------------------------------------------------------------
 const env = process.env;
@@ -145,9 +146,10 @@ const adminRoutes = {
       const d = sanitize.dataset(raw);
       const rec = { ...monthRecord(d.month) };
       if (rec.locked && !d.locked) { skipped.push({ month: d.month, kind: d.kind, fileName: d.fileName, why: 'locked' }); continue; }
-      const { kind, month, locked, ...rest } = d;
+      const { kind, month, locked, mapping, ...rest } = d;
       rec[kind] = rest;
-      if (locked) rec.locked = true;
+      // 마감자료·백업에서 온 확정 자료는 그때 저장한 보고 당시 매핑을 그대로 쓴다.
+      if (locked) { rec.locked = true; if (kind === 'contract' && mapping) rec.mapping = mapping; }
       storage.saveMonth(month, stamp(rec, user));
       saved.push({ month, kind, fileName: d.fileName, locked: !!rec.locked });
     }
@@ -156,16 +158,20 @@ const adminRoutes = {
   },
   async lock(body, user) {
     if (!sanitize.isMonth(body.upto)) throw Object.assign(new Error('마감할 월을 골라 주세요.'), { status: 400 });
+    const { input, months } = storage.load();
+    if (!input) throw Object.assign(new Error('입력용 엑셀을 먼저 올려 주세요(확정할 때 본부매핑을 함께 저장합니다).'), { status: 409 });
     const locked = [];
-    for (const [m, rec] of Object.entries(storage.load().months)) {
-      if (m <= body.upto && rec.contract && !rec.locked) { storage.saveMonth(m, stamp({ ...rec, locked: true }, user)); locked.push(m); }
+    for (const [m, rec] of Object.entries(months)) {
+      // 확정하는 순간의 본부·중분류 매핑을 '보고 당시 기준'으로 함께 저장한다.
+      if (m <= body.upto && rec.contract && !rec.locked) { storage.saveMonth(m, stamp({ ...rec, locked: true, mapping: effectiveMapping(input.cfg, m) }, user)); locked.push(m); }
     }
     storage.audit({ by: user.email, action: 'lock', upto: body.upto, locked });
     return { locked };
   },
   async unlock(body, user) {
     if (!sanitize.isMonth(body.month) || !storage.load().months[body.month]) throw Object.assign(new Error('없는 월입니다.'), { status: 404 });
-    storage.saveMonth(body.month, stamp({ ...monthRecord(body.month), locked: false }, user));
+    const { mapping, ...rest } = monthRecord(body.month); // 확정을 풀면 보고 당시 매핑도 지운다(다시 확정할 때 새로 저장)
+    storage.saveMonth(body.month, stamp({ ...rest, locked: false }, user));
     storage.audit({ by: user.email, action: 'unlock', month: body.month });
     return { ok: true };
   },

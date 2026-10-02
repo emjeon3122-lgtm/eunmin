@@ -5,7 +5,7 @@
   const SERVER = typeof DASHBOARD_MODE !== 'undefined' && DASHBOARD_MODE === 'server';
   const VERSION = typeof DASHBOARD_VERSION !== 'undefined' ? DASHBOARD_VERSION : '개발';
   const footer = () => el('div', { class: 'foot', text: `실적 대시보드 버전 ${VERSION}${SERVER ? ' · 회사 서버' : ' · PC 파일'}` });
-  const state = { user: null, monthMeta: [], inputMeta: null, notice: [], busy: '', cfg: null, datasets: [], files: [], persist: false, savedAt: null, res: null, errors: [], sel: { month: null, bu: TOTAL, cat: null }, tab: 'dash', mom: { kind: '전체', q: '' }, field: '계약', yoyList: '올해' };
+  const state = { user: null, monthMeta: [], inputMeta: null, notice: [], busy: '', loadSeq: 0, cfg: null, datasets: [], files: [], persist: false, savedAt: null, res: null, errors: [], sel: { month: null, bu: TOTAL, cat: null, basis: 'current' }, tab: 'dash', mom: { kind: '전체', q: '' }, field: '계약', yoyList: '올해' };
   const charts = [];
   const pendingCharts = []; // 캔버스가 화면에 붙은 뒤에 그려야 크기가 맞는다
   const app = document.getElementById('app');
@@ -91,6 +91,7 @@
       state.user = d.user; state.monthMeta = d.months || []; state.inputMeta = d.input;
       state.cfg = d.cfg ? Model.cfgFromPlain(d.cfg) : null;
       state.datasets = d.datasets || [];
+      state.loadSeq++; // 서버 자료를 새로 받은 횟수(시험·디버깅용)
     } catch (e) {
       state.errors = [e.message];
     }
@@ -228,7 +229,7 @@
   }
 
   function rebuild() {
-    state.res = state.cfg && state.datasets.length ? Model.build(state.cfg, state.datasets, { fy: state.sel.fy }) : null;
+    state.res = state.cfg && state.datasets.length ? Model.build(state.cfg, state.datasets, { fy: state.sel.fy, basis: state.sel.basis, restrictBus: SERVER && !!state.user && !state.user.all }) : null;
     if (state.res && !state.res.empty) state.sel.fy = state.res.fyYear;
     if (state.res && !state.res.empty) {
       if (!state.sel.month || !state.res.months.includes(state.sel.month) || !state.res.loadedMonths.has(state.sel.month)) state.sel.month = state.res.latest;
@@ -274,6 +275,7 @@
           }, text: '처음으로' }),
         ])),
       tabs(),
+      res.basis === 'reported' ? el('div', { class: 'notice', text: `보고 당시 기준: 확정(🔒)할 때 저장한 본부매핑으로 나눈 숫자입니다${res.snapshotAt(state.sel.month) ? ` (이 달 저장 ${new Date(res.snapshotAt(state.sel.month)).toLocaleDateString('ko-KR')})` : ' — 이 달은 아직 확정 전이라 현재 매핑을 씁니다'}. 달마다 조직이 다를 수 있어 전월·전년 비교는 참고용입니다.` }) : null,
       state.busy ? el('div', { class: 'warnings', text: state.busy }) : null,
       notices(),
       warnings([...state.errors, ...(SERVER ? [] : cfg.problems || []), ...(SERVER && !state.user?.admin ? [] : res.warnings)]),
@@ -316,6 +318,9 @@
     return el('div', { class: 'filters' },
       el('div', { class: 'seg', role: 'group', 'aria-label': '본부 선택' }, bus.map((b) => el('button', {
         'aria-pressed': String(state.sel.bu === b), onclick: () => { state.sel.bu = b; render(); }, text: b }))),
+      res.hasSnapshots ? el('div', { class: 'seg', role: 'group', 'aria-label': '조직 기준 선택' }, [['current', '현재 조직 기준'], ['reported', '보고 당시 기준']].map(([k, label]) => el('button', {
+        'aria-pressed': String(res.basis === k), title: k === 'reported' ? '확정할 때 저장한 본부매핑으로 나눈 숫자' : '지금의 본부매핑으로 과거까지 다시 나눈 숫자',
+        onclick: () => { state.sel.basis = k; rebuild(); }, text: label }))) : null,
       res.fys.length > 1 ? el('div', { class: 'seg', role: 'group', 'aria-label': '회계연도 선택' }, res.fys.map((fy) => el('button', {
         'aria-pressed': String(res.fyYear === fy), onclick: () => { state.sel.fy = fy; state.sel.month = null; rebuild(); }, text: `FY${fy}` }))) : null,
       el('div', { class: 'seg', role: 'group', 'aria-label': '월 선택' }, res.months.map((m) => {
@@ -782,9 +787,10 @@
         el('a', { class: 'btn', href: '/api/admin/backup', text: '백업 파일 받기' }),
         el('button', { class: 'btn', text: '계약 원장 CSV(엑셀용)', onclick: () => exportLedger(res) })),
       el('div', { class: 'table-wrap' }, el('table', {},
-        el('thead', {}, el('tr', {}, ['월', '상태', '계약·매출 파일', '건수', '미수금 파일', '마지막 변경', '관리'].map((h) => el('th', { text: h })))),
+        el('thead', {}, el('tr', {}, ['월', '상태', '보고 당시 매핑', '계약·매출 파일', '건수', '미수금 파일', '마지막 변경', '관리'].map((h) => el('th', { text: h })))),
         el('tbody', {}, meta.map((x) => el('tr', {},
           el('td', { text: monthLabel(x.month) }), el('td', { text: x.locked ? '🔒 확정' : '작업 중' }),
+          el('td', { text: x.mappingAt ? `저장됨 (${new Date(x.mappingAt).toLocaleDateString('ko-KR')})` : x.locked ? '없음 — 확정 풀고 다시 확정하면 저장' : '-' }),
           el('td', { text: x.contract ? `${x.contract.fileName} › ${x.contract.sheetName}` : '-' }), el('td', { class: 'num', text: x.contract ? fmt(x.contract.rows) : '-' }),
           el('td', { text: x.ar ? x.ar.fileName : '-' }),
           el('td', { text: x.updatedAt ? `${new Date(x.updatedAt).toLocaleString('ko-KR')} ${x.by || ''}` : '-' }),
@@ -800,8 +806,8 @@
     for (const m of [...res.loadedMonths].sort()) {
       const d = res.contracts.get(m);
       const locked = d.locked ? 'Y' : '';
-      d.rows.forEach((r) => rows.push([monthLabel(m), locked, res.buOf(r.사업부, m), r.사업부, r.no, r.회사명, r.보고서명, r.계약구분, res.catOf(r.계약구분), r.상태, r.체결일, r.신규여부, r.계약, r.매출, 'ERP']));
-      res.gijangFor(m).forEach((g) => rows.push([monthLabel(m), locked, res.buOf(g.사업부, m), g.사업부, '', '', g.메모, g.계약구분, res.catOf(g.계약구분), '', '', '', g.계약, g.매출, '수기']));
+      d.rows.forEach((r) => rows.push([monthLabel(m), locked, res.buOf(r.사업부, m), r.사업부, r.no, r.회사명, r.보고서명, r.계약구분, res.catOf(r.계약구분, m), r.상태, r.체결일, r.신규여부, r.계약, r.매출, 'ERP']));
+      res.gijangFor(m).forEach((g) => rows.push([monthLabel(m), locked, res.buOf(g.사업부, m), g.사업부, '', '', g.메모, g.계약구분, res.catOf(g.계약구분, m), '', '', '', g.계약, g.매출, '수기']));
     }
     download(`계약원장_${new Date().toISOString().slice(0, 10)}.csv`, toCsv(['월', '확정', '본부', '사업부', '계약번호', '회사명', '보고서명', '계약구분', '중분류', '계약상태', '체결일', '신규여부', '계약금액(원)', '매출금액(원)', '구분'], rows));
   }
@@ -825,7 +831,7 @@
           el('span', { text: '마감할 마지막 월' }), upto,
           el('button', { class: 'btn primary', text: '마감자료 파일 만들기', onclick: () => {
             const u = upto.value;
-            download(`실적대시보드_마감자료_${monthLabel(u).replace('월', '')}.json`, Model.exportSnapshot(state.datasets, u), 'application/json');
+            download(`실적대시보드_마감자료_${monthLabel(u).replace('월', '')}.json`, Model.exportSnapshot(state.datasets, u, state.cfg), 'application/json');
           } })),
         el('p', { class: 'muted', text: '고른 달까지 불러온 모든 월의 계약·매출·미수금 자료를 파일 하나로 묶습니다. 이 파일을 OneDrive 대시보드 폴더에 두고, 다음부터는 월별 파일 대신 이 파일 + 이번 달 파일만 올리면 됩니다. 다음 달 마감 때는 이 파일과 새 달 파일을 올린 뒤 다시 만들어 교체하세요.' })));
       box.append(el('section', { class: 'block' }, el('h3', { text: '불러온 파일' }),

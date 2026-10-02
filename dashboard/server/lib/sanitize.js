@@ -39,6 +39,11 @@ const row = (r, strs, nums) => {
 };
 const manualRow = (r) => ({ 사업부: str(r && r.사업부), 계약구분: str(r && r.계약구분) || '기장', 계약: num(r && r.계약), 매출: num(r && r.매출), 메모: str(r && r.메모) });
 
+// 보고 당시 매핑: { bu: [[사업부, 본부]], cat: [[계약구분, 중분류]], at }
+const mapping = (m) => ({ bu: pairs(arr(m.bu, 5000)), cat: pairs(arr(m.cat, 5000)), at: str(m.at, 40) });
+const fyTriples = (v) => arr(v, 5000).filter((t) => Array.isArray(t) && t.length === 3 && /^\d{4}$/.test(String(t[0])))
+  .map(([fy, k, bu]) => [Number(fy), str(k), str(bu)]);
+
 function dataset(d) {
   if (!d || typeof d !== 'object') throw bad('자료 형식이 올바르지 않습니다.');
   if (d.kind !== 'contract' && d.kind !== 'ar') throw bad('자료 종류를 알 수 없습니다.');
@@ -50,6 +55,7 @@ function dataset(d) {
     out.manual = arr(d.manual, 10000).map(manualRow);
     out.noId = out.manual.length;
     out.asOf = typeof d.asOf === 'string' && DATE_RE.test(d.asOf) ? d.asOf : null;
+    if (d.mapping && typeof d.mapping === 'object') out.mapping = mapping(d.mapping);
   } else {
     out.rows = d.rows.map((r) => row(r, A_STR, A_NUM));
   }
@@ -71,8 +77,9 @@ function config(p) {
     buOrder: arr(p.buOrder, 200).map((x) => str(x, 100)),
     plans: obj(p.plans, (k) => k === '*' || /^\d{4}$/.test(k), (v) => obj(v, anyKey, num)),
     buMap: pairs(p.buMap),
-    buMapFy: arr(p.buMapFy, 5000).filter((t) => Array.isArray(t) && t.length === 3 && /^\d{4}$/.test(String(t[0])))
-      .map(([fy, k, bu]) => [Number(fy), str(k), str(bu)]),
+    buMapFy: fyTriples(p.buMapFy),
+    buMapReported: fyTriples(p.buMapReported),
+    plansReported: obj(p.plansReported, (k) => k === '*' || /^\d{4}$/.test(k), (v) => obj(v, anyKey, num)),
     catMap: pairs(p.catMap),
     people: obj(p.people, isMonth, (v) => obj(v, anyKey, (x) => Object.fromEntries(PEOPLE.map((k) => [k, numOrNull(x && x[k])])))),
     fund: obj(p.fund, isMonth, (x) => ({ 자금: numOrNull(x && x.자금), 예수금: numOrNull(x && x.예수금), 전년자금: numOrNull(x && x.전년자금), 전년예수금: numOrNull(x && x.전년예수금) })),
@@ -88,4 +95,4 @@ function config(p) {
   };
 }
 
-module.exports = { dataset, config, isMonth, okKey };
+module.exports = { dataset, config, isMonth, okKey, mapping };

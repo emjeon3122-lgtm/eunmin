@@ -88,7 +88,7 @@ const Model = (() => {
     const t = async (name, req) => (book.sheetNames.includes(name) ? table(await book.rows(name), req) || [] : []);
     const cfg = {
       company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, fundScope: 'everyone',
-      buOrder: [], plans: {}, buMap: new Map(), buMapFy: [], catMap: new Map(),
+      buOrder: [], plans: {}, plansReported: {}, buMap: new Map(), buMapFy: [], buMapReported: [], catMap: new Map(),
       people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(), access: [],
       problems: [],
     };
@@ -103,11 +103,13 @@ const Model = (() => {
       else if (k === '중분류순서') cfg.catOrder = text(v).split(',').map((s) => s.trim()).filter(Boolean);
     }
     // '연도' 칸(예: FY2026)이 있으면 회계연도별 계획, 없으면 모든 연도에 같은 계획을 쓴다.
+    // '기준' 칸이 '보고당시'인 줄은 보고 당시 기준 화면에서만 쓰는 계획(당시 본부 구성).
     for (const r of await t('사업계획', ['본부', '사업계획'])) {
       const bu = text(r.get('본부'));
       if (!bu || bu === TOTAL) continue;
-      if (!cfg.buOrder.includes(bu)) cfg.buOrder.push(bu);
-      (cfg.plans[parseFy(r.get('연도')) ?? '*'] ||= {})[bu] = num(r.get('사업계획'));
+      const reported = norm(r.get('기준')).includes('보고당시');
+      if (!reported && !cfg.buOrder.includes(bu)) cfg.buOrder.push(bu);
+      ((reported ? cfg.plansReported : cfg.plans)[parseFy(r.get('연도')) ?? '*'] ||= {})[bu] = num(r.get('사업계획'));
     }
     // '적용연도'(예: FY2025)를 적으면 그 회계연도 자료에만 쓰는 매핑(조직개편 전 사업부 이름 등). 비우면 모든 연도.
     for (const r of await t('본부매핑', ['사업부', '본부'])) {
@@ -115,6 +117,11 @@ const Model = (() => {
       const fy = parseFy(r.get('적용연도') ?? r.get('연도'));
       if (fy) cfg.buMapFy.push([fy, norm(r.get('사업부')), text(r.get('본부'))]);
       else cfg.buMap.set(norm(r.get('사업부')), text(r.get('본부')));
+    }
+    // 보고 당시 본부 구성(지난 해를 확정할 때 저장할 매핑). 적용연도가 있어야 한다.
+    for (const r of await t('본부매핑(보고당시)', ['사업부', '본부', '적용연도'])) {
+      const fy = parseFy(r.get('적용연도'));
+      if (fy && text(r.get('사업부'))) cfg.buMapReported.push([fy, norm(r.get('사업부')), text(r.get('본부'))]);
     }
     for (const r of await t('중분류매핑', ['계약구분', '중분류'])) {
       const c = text(r.get('중분류'));
@@ -276,10 +283,19 @@ const Model = (() => {
     const fyFirst = monthKey(fyYear, cfg.fyStart);
     const months = Array.from({ length: 12 }, (_, i) => addMonths(fyFirst, i));
     const fyLast = months[11];
-    // 본부 = 그 달이 속한 회계연도 전용 매핑 → 공통 매핑 순서로 찾는다.
+    // 본부 = 그 달이 속한 회계연도 전용 매핑 → 공통 매핑 순서로 찾는다(현재 조직 기준).
+    // 보고 당시 기준(opts.basis === 'reported')이면 확정할 때 저장한 그 달의 매핑을 쓴다.
+    const reported = opts.basis === 'reported';
+    const snaps = new Map();
+    for (const [m, d] of contracts) if (d.mapping) snaps.set(m, { bu: new Map(d.mapping.bu), cat: new Map(d.mapping.cat), at: d.mapping.at });
+    const snapOf = (m) => (reported && m ? snaps.get(m) : null);
     const buFy = new Map(cfg.buMapFy.map(([fy, k, bu]) => [`${fy}|${k}`, bu]));
-    const buOf = (s, m) => (m && buFy.get(`${fyOfMonth(m, cfg.fyStart)}|${norm(s)}`)) || cfg.buMap.get(norm(s)) || UNMAPPED;
-    const catOf = (s) => cfg.catMap.get(norm(s)) || UNMAPPED;
+    const buOf = (s, m) => {
+      const sp = snapOf(m);
+      if (sp) return sp.bu.get(norm(s)) || UNMAPPED;
+      return (m && buFy.get(`${fyOfMonth(m, cfg.fyStart)}|${norm(s)}`)) || cfg.buMap.get(norm(s)) || UNMAPPED;
+    };
+    const catOf = (s, m) => { const sp = snapOf(m); return (sp ? sp.cat.get(norm(s)) : cfg.catMap.get(norm(s))) || UNMAPPED; };
 
     // 기장 수기분: 입력용 '기장추가'에 그 달이 있으면 그 값, 없으면 올린 파일의 수기 행(계약번호 없는 행)을 쓴다.
     const gijangFor = (m) => {
@@ -294,7 +310,7 @@ const Model = (() => {
       const d = contracts.get(m);
       const a = {};
       const add = (사업부, 계약구분, c, r) => {
-        const bu = buOf(사업부, m); const cat = catOf(계약구분);
+        const bu = buOf(사업부, m); const cat = catOf(계약구분, m);
         if (bu === UNMAPPED) unmappedBu.set(사업부, (unmappedBu.get(사업부) || 0) + c);
         if (cat === UNMAPPED) unmappedCat.set(계약구분, (unmappedCat.get(계약구분) || 0) + c);
         const x = (a[bu] ||= { 계약: 0, 매출: 0, cats: {}, catsR: {} });
@@ -322,7 +338,8 @@ const Model = (() => {
 
     const extraBu = new Set();
     Object.values(agg).forEach((a) => Object.keys(a).forEach((b) => { if (!cfg.buOrder.includes(b)) extraBu.add(b); }));
-    const buList = [...cfg.buOrder, ...extraBu];
+    // 서버에서 일부 본부만 볼 수 있는 사람은 권한 본부 버튼만 보여준다.
+    const buList = opts.restrictBus ? [...cfg.buOrder] : [...cfg.buOrder, ...extraBu];
     const cats = [...cfg.catOrder, ...(unmappedCat.size ? [UNMAPPED] : [])];
 
     const sumOver = (b, f) => {
@@ -346,8 +363,11 @@ const Model = (() => {
       return peopleVal(pm, b, k);
     };
     const prevVal = (m, b, k) => (cfg.prev[m] ? sumOver(b, (x) => cfg.prev[m]?.[x]?.[k] ?? null) : prevFromRaw(m, b, k));
-    const planOf = (x) => cfg.plans[fyYear]?.[x] ?? cfg.plans['*']?.[x];
-    const planVal = (b) => (b === TOTAL ? cfg.buOrder.reduce((s, x) => s + (planOf(x) || 0), 0) : planOf(b) ?? null);
+    // 보고 당시 기준이면 '기준=보고당시' 계획을 먼저 쓰고, 없으면 일반 계획을 쓴다.
+    const repPlan = reported ? (cfg.plansReported[fyYear] || cfg.plansReported['*']) : null;
+    const planOf = (x) => repPlan?.[x] ?? cfg.plans[fyYear]?.[x] ?? cfg.plans['*']?.[x];
+    const planBus = repPlan ? [...new Set([...Object.keys(repPlan), ...cfg.buOrder])] : cfg.buOrder;
+    const planVal = (b) => (b === TOTAL ? planBus.reduce((s, x) => s + (planOf(x) || 0), 0) : planOf(b) ?? null);
     const fundAt = (m) => cfg.fund[m]?.자금 ?? null;
     const fundPy = (m) => cfg.fund[m]?.전년자금 ?? fundAt(addMonths(m, -12));
     const diff = (a, b) => (a == null || b == null ? null : a - b);
@@ -400,13 +420,13 @@ const Model = (() => {
         const d = after - before_;
         if (Math.abs(d) < 0.5) return;
         rows.push({ 본부: buOf(r.사업부, mm), 사업부: r.사업부, no: r.no, 회사명: r.회사명, 보고서명: r.보고서명,
-          계약구분: r.계약구분, 중분류: catOf(r.계약구분), 신규여부: r.신규여부 || '', 전월: before_ / U, 당월: after / U, 증감: d / U,
+          계약구분: r.계약구분, 중분류: catOf(r.계약구분, mm), 신규여부: r.신규여부 || '', 전월: before_ / U, 당월: after / U, 증감: d / U,
           구분: kind || (d > 0 ? '증가' : '감소'), 사유: reasons.get(r.no) || (kind === '신규' ? '신규' : '') });
       };
       for (const r of cur.rows) {
         const p = prevMap.get(r.no); seen.add(r.no);
         // 같은 계약이라도 사업부·계약구분이 바뀌면 이전 분류에서 빼고 새 분류에 더한다(중분류·본부별 합계가 맞도록).
-        if (p && (buOf(p.사업부, pm) !== buOf(r.사업부, m) || catOf(p.계약구분) !== catOf(r.계약구분))) {
+        if (p && (buOf(p.사업부, pm) !== buOf(r.사업부, m) || catOf(p.계약구분, pm) !== catOf(r.계약구분, m))) {
           push(p, p[field], 0, '분류변경', pm);
           push(r, 0, r[field], '분류변경');
           continue;
@@ -434,9 +454,9 @@ const Model = (() => {
       const d = contracts.get(m);
       if (!d) return null;
       const rows = d.rows.map((r) => ({ no: r.no, 본부: buOf(r.사업부, m), 사업부: r.사업부, 회사명: r.회사명, 보고서명: r.보고서명,
-        중분류: catOf(r.계약구분), 신규여부: r.신규여부 || '', 체결일: r.체결일 || '', 계약: r.계약 / U, 매출: r.매출 / U }));
+        중분류: catOf(r.계약구분, m), 신규여부: r.신규여부 || '', 체결일: r.체결일 || '', 계약: r.계약 / U, 매출: r.매출 / U }));
       gijangFor(m).forEach((g) => rows.push({ no: '(기장 수기분)', 본부: buOf(g.사업부, m), 사업부: g.사업부,
-        회사명: '', 보고서명: g.메모, 중분류: catOf(g.계약구분), 신규여부: '', 체결일: '', 계약: g.계약 / U, 매출: g.매출 / U }));
+        회사명: '', 보고서명: g.메모, 중분류: catOf(g.계약구분, m), 신규여부: '', 체결일: '', 계약: g.계약 / U, 매출: g.매출 / U }));
       return rows;
     }
     function yoyDetail(m) {
@@ -494,7 +514,8 @@ const Model = (() => {
     }
 
     return {
-      empty: false, warnings, gijangFor, gijangSource, buOf, catOf, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
+      empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
+      hasSnapshots: snaps.size > 0, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
       loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
@@ -508,7 +529,7 @@ const Model = (() => {
   }
   function cfgFromPlain(p) {
     const pairs = (v) => (Array.isArray(v) ? v.filter((x) => Array.isArray(x) && x.length === 2) : []);
-    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, buOrder: [], buMapFy: [], plans: {}, people: {}, fund: {},
+    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, buOrder: [], buMapFy: [], buMapReported: [], plansReported: {}, plans: {}, people: {}, fund: {},
       prev: {}, arManual: {}, gijang: [], access: [], problems: [], ...p,
       buMap: new Map(pairs(p.buMap)), catMap: new Map(pairs(p.catMap)), yoyReasons: new Map(pairs(p.yoyReasons)),
       reasons: Object.fromEntries(Object.entries(p.reasons || {}).map(([m, v]) => [m, new Map(pairs(v))])) };
@@ -522,12 +543,25 @@ const Model = (() => {
   const NUM_FIELDS = new Set(['계약', '매출', '금액']);
   const MAX_ROWS = 200000;
 
-  function exportSnapshot(datasets, upto) {
+  // 확정할 때의 본부·중분류 매핑(보고 당시 기준). 현재 매핑 + 그 회계연도 전용 매핑 + '본부매핑(보고당시)'.
+  function effectiveMapping(cfg, m) {
+    const fy = fyOfMonth(m, cfg.fyStart);
+    const bu = new Map(cfg.buMap);
+    for (const [f, k, b] of cfg.buMapFy) if (f === fy) bu.set(k, b);
+    for (const [f, k, b] of cfg.buMapReported || []) if (f === fy) bu.set(k, b);
+    return { bu: [...bu], cat: [...cfg.catMap], at: new Date().toISOString() };
+  }
+
+  function exportSnapshot(datasets, upto, cfg) {
     const { contracts, ars } = pickActive(datasets);
     const months = {};
     const pack = (d, fields) => ({ fileName: d.fileName, sheetName: d.sheetName, asOf: d.asOf || null, noId: d.noId || 0,
       fields, rows: d.rows.map((r) => fields.map((f) => r[f] ?? null)), manual: d.manual || [] });
-    for (const [m, d] of contracts) if (m <= upto) (months[m] ||= {}).contract = pack(d, C_FIELDS);
+    for (const [m, d] of contracts) {
+      if (m > upto) continue;
+      const mapping = d.mapping || (cfg ? effectiveMapping(cfg, m) : null);
+      (months[m] ||= {}).contract = { ...pack(d, C_FIELDS), ...(mapping ? { mapping } : {}) };
+    }
     for (const [m, d] of ars) if (m <= upto) (months[m] ||= {}).ar = pack(d, A_FIELDS);
     return JSON.stringify({ type: SNAP_TYPE, version: 1, createdAt: new Date().toISOString(), upto, months });
   }
@@ -551,8 +585,11 @@ const Model = (() => {
       const c = unpack(v.contract, C_FIELDS);
       const manual = (Array.isArray(v.contract?.manual) ? v.contract.manual : []).filter((x) => x && typeof x === 'object')
         .map((x) => ({ 사업부: text(x.사업부), 계약구분: text(x.계약구분) || '기장', 계약: num(x.계약), 매출: num(x.매출), 메모: text(x.메모) }));
+      const mp = v.contract?.mapping;
+      const pairs = (x) => (Array.isArray(x) ? x.filter((p) => Array.isArray(p) && p.length === 2).map(([a, b]) => [text(a), text(b)]) : []);
+      const mapping = mp && typeof mp === 'object' && Array.isArray(mp.bu) ? { bu: pairs(mp.bu), cat: pairs(mp.cat), at: text(mp.at) } : null;
       if (c) out.push({ kind: 'contract', fileName, sheetName: `마감 ${monthLabel(m)} (${text(v.contract.fileName)})`, rows: c, month: m,
-        asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: v.locked !== false });
+        asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: v.locked !== false, ...(mapping ? { mapping } : {}) });
       const a = unpack(v.ar, A_FIELDS);
       if (a) out.push({ kind: 'ar', fileName, sheetName: `마감 ${monthLabel(m)} 미수금`, rows: a, month: m, locked: v.locked !== false });
     }
@@ -561,5 +598,5 @@ const Model = (() => {
     return { datasets: out, upto: parseMonth(o.upto), createdAt: text(o.createdAt), input };
   }
 
-  return { TOTAL, UNMAPPED, PEOPLE, isInputBook, readInput, readDataBook, build, exportSnapshot, readSnapshot, cfgToPlain, cfgFromPlain, norm, monthLabel, parseMonth, addMonths };
+  return { TOTAL, UNMAPPED, PEOPLE, isInputBook, readInput, readDataBook, build, exportSnapshot, readSnapshot, effectiveMapping, cfgToPlain, cfgFromPlain, norm, monthLabel, parseMonth, addMonths };
 })();
