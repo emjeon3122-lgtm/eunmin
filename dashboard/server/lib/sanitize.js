@@ -71,6 +71,8 @@ function config(p) {
     buOrder: arr(p.buOrder, 200).map((x) => str(x, 100)),
     plans: obj(p.plans, (k) => k === '*' || /^\d{4}$/.test(k), (v) => obj(v, anyKey, num)),
     buMap: pairs(p.buMap),
+    buMapFy: arr(p.buMapFy, 5000).filter((t) => Array.isArray(t) && t.length === 3 && /^\d{4}$/.test(String(t[0])))
+      .map(([fy, k, bu]) => [Number(fy), str(k), str(bu)]),
     catMap: pairs(p.catMap),
     people: obj(p.people, isMonth, (v) => obj(v, anyKey, (x) => Object.fromEntries(PEOPLE.map((k) => [k, numOrNull(x && x[k])])))),
     fund: obj(p.fund, isMonth, (x) => ({ 자금: numOrNull(x && x.자금), 예수금: numOrNull(x && x.예수금), 전년자금: numOrNull(x && x.전년자금), 전년예수금: numOrNull(x && x.전년예수금) })),

@@ -800,8 +800,8 @@
     for (const m of [...res.loadedMonths].sort()) {
       const d = res.contracts.get(m);
       const locked = d.locked ? 'Y' : '';
-      d.rows.forEach((r) => rows.push([monthLabel(m), locked, res.buOf(r.사업부), r.사업부, r.no, r.회사명, r.보고서명, r.계약구분, res.catOf(r.계약구분), r.상태, r.체결일, r.신규여부, r.계약, r.매출, 'ERP']));
-      res.gijangFor(m).forEach((g) => rows.push([monthLabel(m), locked, res.buOf(g.사업부), g.사업부, '', '', g.메모, g.계약구분, res.catOf(g.계약구분), '', '', '', g.계약, g.매출, '수기']));
+      d.rows.forEach((r) => rows.push([monthLabel(m), locked, res.buOf(r.사업부, m), r.사업부, r.no, r.회사명, r.보고서명, r.계약구분, res.catOf(r.계약구분), r.상태, r.체결일, r.신규여부, r.계약, r.매출, 'ERP']));
+      res.gijangFor(m).forEach((g) => rows.push([monthLabel(m), locked, res.buOf(g.사업부, m), g.사업부, '', '', g.메모, g.계약구분, res.catOf(g.계약구분), '', '', '', g.계약, g.매출, '수기']));
     }
     download(`계약원장_${new Date().toISOString().slice(0, 10)}.csv`, toCsv(['월', '확정', '본부', '사업부', '계약번호', '회사명', '보고서명', '계약구분', '중분류', '계약상태', '체결일', '신규여부', '계약금액(원)', '매출금액(원)', '구분'], rows));
   }
