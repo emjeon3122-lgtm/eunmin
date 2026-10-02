@@ -41,8 +41,6 @@ const manualRow = (r) => ({ 사업부: str(r && r.사업부), 계약구분: str(
 
 // 보고 당시 매핑: { bu: [[사업부, 본부]], cat: [[계약구분, 중분류]], at }
 const mapping = (m) => ({ bu: pairs(arr(m.bu, 5000)), cat: pairs(arr(m.cat, 5000)), at: str(m.at, 40) });
-const fyTriples = (v) => arr(v, 5000).filter((t) => Array.isArray(t) && t.length === 3 && /^\d{4}$/.test(String(t[0])))
-  .map(([fy, k, bu]) => [Number(fy), str(k), str(bu)]);
 
 function dataset(d) {
   if (!d || typeof d !== 'object') throw bad('자료 형식이 올바르지 않습니다.');
@@ -76,9 +74,9 @@ function config(p) {
     catOrder: arr(p.catOrder, 100).map((x) => str(x, 100)),
     buOrder: arr(p.buOrder, 200).map((x) => str(x, 100)),
     plans: obj(p.plans, (k) => k === '*' || /^\d{4}$/.test(k), (v) => obj(v, anyKey, num)),
-    buMap: pairs(p.buMap),
-    buMapFy: fyTriples(p.buMapFy),
-    buMapReported: fyTriples(p.buMapReported),
+    // 본부매핑 이력: [사업부, 적용시작월|null, 본부(당시), 현재 본부|null]
+    orgRules: arr(p.orgRules, 10000).filter((t) => Array.isArray(t) && t.length === 4)
+      .map(([s, from, bu, cur]) => [str(s, 300), isMonth(from) ? from : null, str(bu, 100), cur ? str(cur, 100) : null]).filter((t) => t[0] && t[2]),
     plansReported: obj(p.plansReported, (k) => k === '*' || /^\d{4}$/.test(k), (v) => obj(v, anyKey, num)),
     catMap: pairs(p.catMap),
     people: obj(p.people, isMonth, (v) => obj(v, anyKey, (x) => Object.fromEntries(PEOPLE.map((k) => [k, numOrNull(x && x[k])])))),

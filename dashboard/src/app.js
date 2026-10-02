@@ -275,7 +275,7 @@
           }, text: '처음으로' }),
         ])),
       tabs(),
-      res.basis === 'reported' ? el('div', { class: 'notice', text: `보고 당시 기준: 확정(🔒)할 때 저장한 본부매핑으로 나눈 숫자입니다${res.snapshotAt(state.sel.month) ? ` (이 달 저장 ${new Date(res.snapshotAt(state.sel.month)).toLocaleDateString('ko-KR')})` : ' — 이 달은 아직 확정 전이라 현재 매핑을 씁니다'}. 달마다 조직이 다를 수 있어 전월·전년 비교는 참고용입니다.` }) : null,
+      res.basis === 'reported' ? el('div', { class: 'notice', text: `보고 당시 기준: 그 달에 실제로 속했던 본부로 나눈 숫자입니다${res.snapshotAt(state.sel.month) ? ` (확정 때 저장한 매핑, ${new Date(res.snapshotAt(state.sel.month)).toLocaleDateString('ko-KR')})` : ' (본부매핑의 적용시작월 기준)'}. 달마다 조직이 다를 수 있어 전월·전년 비교는 참고용입니다.` }) : null,
       state.busy ? el('div', { class: 'warnings', text: state.busy }) : null,
       notices(),
       warnings([...state.errors, ...(SERVER ? [] : cfg.problems || []), ...(SERVER && !state.user?.admin ? [] : res.warnings)]),
@@ -318,8 +318,8 @@
     return el('div', { class: 'filters' },
       el('div', { class: 'seg', role: 'group', 'aria-label': '본부 선택' }, bus.map((b) => el('button', {
         'aria-pressed': String(state.sel.bu === b), onclick: () => { state.sel.bu = b; render(); }, text: b }))),
-      res.hasSnapshots ? el('div', { class: 'seg', role: 'group', 'aria-label': '조직 기준 선택' }, [['current', '현재 조직 기준'], ['reported', '보고 당시 기준']].map(([k, label]) => el('button', {
-        'aria-pressed': String(res.basis === k), title: k === 'reported' ? '확정할 때 저장한 본부매핑으로 나눈 숫자' : '지금의 본부매핑으로 과거까지 다시 나눈 숫자',
+      res.hasBasis ? el('div', { class: 'seg', role: 'group', 'aria-label': '조직 기준 선택' }, [['current', '현재 조직 기준'], ['reported', '보고 당시 기준']].map(([k, label]) => el('button', {
+        'aria-pressed': String(res.basis === k), title: k === 'reported' ? '그 달에 실제로 속했던 본부로 나눈 숫자' : '지금의 조직으로 과거까지 다시 나눈 숫자',
         onclick: () => { state.sel.basis = k; rebuild(); }, text: label }))) : null,
       res.fys.length > 1 ? el('div', { class: 'seg', role: 'group', 'aria-label': '회계연도 선택' }, res.fys.map((fy) => el('button', {
         'aria-pressed': String(res.fyYear === fy), onclick: () => { state.sel.fy = fy; state.sel.month = null; rebuild(); }, text: `FY${fy}` }))) : null,

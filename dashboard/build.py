@@ -12,6 +12,7 @@ SCRIPTS = [
     ROOT / 'vendor' / 'chart.umd.min.js',
     ROOT / 'vendor' / 'chartjs-plugin-datalabels.min.js',
     ROOT / 'src' / 'xlsx-reader.js',
+    ROOT / 'src' / 'org.js',
     ROOT / 'src' / 'model.js',
     ROOT / 'src' / 'store.js',
     ROOT / 'src' / 'app.js',
@@ -52,6 +53,8 @@ def main() -> None:
     write(OUT, render(LOCAL_CSP, version))
     write(SERVER_OUT, render('', f"{version}\nconst DASHBOARD_MODE = 'server';"))
     write(ROOT / 'server' / 'VERSION', VERSION + '\n')
+    # 조직 이력 규칙은 화면과 서버가 같은 코드를 쓴다(서버 쪽은 사본).
+    write(ROOT / 'server' / 'lib' / 'org.js', '// 자동 생성: dashboard/src/org.js 사본 — 이 파일을 직접 고치지 말 것 (python build.py)\n' + (ROOT / 'src' / 'org.js').read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

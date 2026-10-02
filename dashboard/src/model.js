@@ -88,7 +88,7 @@ const Model = (() => {
     const t = async (name, req) => (book.sheetNames.includes(name) ? table(await book.rows(name), req) || [] : []);
     const cfg = {
       company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, fundScope: 'everyone',
-      buOrder: [], plans: {}, plansReported: {}, buMap: new Map(), buMapFy: [], buMapReported: [], catMap: new Map(),
+      buOrder: [], plans: {}, plansReported: {}, orgRules: [], catMap: new Map(),
       people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(), access: [],
       problems: [],
     };
@@ -111,18 +111,16 @@ const Model = (() => {
       if (!reported && !cfg.buOrder.includes(bu)) cfg.buOrder.push(bu);
       ((reported ? cfg.plansReported : cfg.plans)[parseFy(r.get('연도')) ?? '*'] ||= {})[bu] = num(r.get('사업계획'));
     }
-    // '적용연도'(예: FY2025)를 적으면 그 회계연도 자료에만 쓰는 매핑(조직개편 전 사업부 이름 등). 비우면 모든 연도.
+    // 본부매핑 = 조직 변경 이력(src/org.js). 사업부 · 본부(당시) · 적용시작월(비우면 처음부터) · 현재 본부(비우면 최근 줄 따라감)
     for (const r of await t('본부매핑', ['사업부', '본부'])) {
       if (!text(r.get('사업부'))) continue;
-      const fy = parseFy(r.get('적용연도') ?? r.get('연도'));
-      if (fy) cfg.buMapFy.push([fy, norm(r.get('사업부')), text(r.get('본부'))]);
-      else cfg.buMap.set(norm(r.get('사업부')), text(r.get('본부')));
+      const fromRaw = text(r.get('적용시작월'));
+      const from = fromRaw ? parseMonth(fromRaw) : null;
+      if (fromRaw && !from) { cfg.problems.push(`입력용 '본부매핑' ${r.rowNo}행: 적용시작월 형식을 알 수 없습니다 (${fromRaw})`); continue; }
+      if (text(r.get('적용연도'))) cfg.problems.push(`입력용 '본부매핑' ${r.rowNo}행: '적용연도' 칸은 더 이상 쓰지 않습니다. '적용시작월'과 '현재 본부'로 적어 주세요.`);
+      cfg.orgRules.push([norm(r.get('사업부')), from, text(r.get('본부')), text(r.get('현재 본부')) || null]);
     }
-    // 보고 당시 본부 구성(지난 해를 확정할 때 저장할 매핑). 적용연도가 있어야 한다.
-    for (const r of await t('본부매핑(보고당시)', ['사업부', '본부', '적용연도'])) {
-      const fy = parseFy(r.get('적용연도'));
-      if (fy && text(r.get('사업부'))) cfg.buMapReported.push([fy, norm(r.get('사업부')), text(r.get('본부'))]);
-    }
+    if (book.sheetNames.includes('본부매핑(보고당시)')) cfg.problems.push("'본부매핑(보고당시)' 시트는 더 이상 쓰지 않습니다. '본부매핑'의 적용시작월로 기간별 본부를 적어 주세요.");
     for (const r of await t('중분류매핑', ['계약구분', '중분류'])) {
       const c = text(r.get('중분류'));
       if (text(r.get('계약구분'))) cfg.catMap.set(norm(r.get('계약구분')), c);
@@ -289,11 +287,11 @@ const Model = (() => {
     const snaps = new Map();
     for (const [m, d] of contracts) if (d.mapping) snaps.set(m, { bu: new Map(d.mapping.bu), cat: new Map(d.mapping.cat), at: d.mapping.at });
     const snapOf = (m) => (reported && m ? snaps.get(m) : null);
-    const buFy = new Map(cfg.buMapFy.map(([fy, k, bu]) => [`${fy}|${k}`, bu]));
+    const org = Org.compile(cfg.orgRules);
     const buOf = (s, m) => {
       const sp = snapOf(m);
       if (sp) return sp.bu.get(norm(s)) || UNMAPPED;
-      return (m && buFy.get(`${fyOfMonth(m, cfg.fyStart)}|${norm(s)}`)) || cfg.buMap.get(norm(s)) || UNMAPPED;
+      return (reported ? org.reported(s, m) : org.current(s, m)) || UNMAPPED;
     };
     const catOf = (s, m) => { const sp = snapOf(m); return (sp ? sp.cat.get(norm(s)) : cfg.catMap.get(norm(s))) || UNMAPPED; };
 
@@ -515,7 +513,7 @@ const Model = (() => {
 
     return {
       empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
-      hasSnapshots: snaps.size > 0, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
+      hasBasis: snaps.size > 0 || org.hasHistory, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
       loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
@@ -524,14 +522,14 @@ const Model = (() => {
   // ---- 설정값 주고받기(서버 버전) -----------------------------------------
   // Map 은 JSON 으로 보낼 수 없으므로 [키, 값] 배열로 바꾼다.
   function cfgToPlain(cfg) {
-    return { ...cfg, buMap: [...cfg.buMap], catMap: [...cfg.catMap], yoyReasons: [...cfg.yoyReasons],
+    return { ...cfg, catMap: [...cfg.catMap], yoyReasons: [...cfg.yoyReasons],
       reasons: Object.fromEntries(Object.entries(cfg.reasons).map(([m, mp]) => [m, [...mp]])) };
   }
   function cfgFromPlain(p) {
     const pairs = (v) => (Array.isArray(v) ? v.filter((x) => Array.isArray(x) && x.length === 2) : []);
-    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, buOrder: [], buMapFy: [], buMapReported: [], plansReported: {}, plans: {}, people: {}, fund: {},
+    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, buOrder: [], orgRules: [], plansReported: {}, plans: {}, people: {}, fund: {},
       prev: {}, arManual: {}, gijang: [], access: [], problems: [], ...p,
-      buMap: new Map(pairs(p.buMap)), catMap: new Map(pairs(p.catMap)), yoyReasons: new Map(pairs(p.yoyReasons)),
+      catMap: new Map(pairs(p.catMap)), yoyReasons: new Map(pairs(p.yoyReasons)),
       reasons: Object.fromEntries(Object.entries(p.reasons || {}).map(([m, v]) => [m, new Map(pairs(v))])) };
   }
 
@@ -543,13 +541,9 @@ const Model = (() => {
   const NUM_FIELDS = new Set(['계약', '매출', '금액']);
   const MAX_ROWS = 200000;
 
-  // 확정할 때의 본부·중분류 매핑(보고 당시 기준). 현재 매핑 + 그 회계연도 전용 매핑 + '본부매핑(보고당시)'.
+  // 확정할 때 저장하는 그 달의 '보고 당시' 매핑(본부매핑 이력 중 그 달에 유효한 줄 + 중분류매핑).
   function effectiveMapping(cfg, m) {
-    const fy = fyOfMonth(m, cfg.fyStart);
-    const bu = new Map(cfg.buMap);
-    for (const [f, k, b] of cfg.buMapFy) if (f === fy) bu.set(k, b);
-    for (const [f, k, b] of cfg.buMapReported || []) if (f === fy) bu.set(k, b);
-    return { bu: [...bu], cat: [...cfg.catMap], at: new Date().toISOString() };
+    return { bu: Org.compile(cfg.orgRules).snapshot(m), cat: [...cfg.catMap], at: new Date().toISOString() };
   }
 
   function exportSnapshot(datasets, upto, cfg) {

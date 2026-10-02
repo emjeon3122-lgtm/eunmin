@@ -173,7 +173,7 @@ section.block h3 { font-size: 15px; margin: 0 0 8px; }
 <body>
 <div class="wrap" id="app"></div>
 <script>
-const DASHBOARD_VERSION = '2026.10.02-2';
+const DASHBOARD_VERSION = '2026.10.02-3';
 const DASHBOARD_MODE = 'server';
 </script>
 <script>
@@ -342,6 +342,59 @@ const XlsxReader = (() => {
 
 </script>
 <script>
+/* org.js */
+// 조직(사업부 → 본부) 변경 이력. 화면(브라우저)과 서버(Node)가 이 파일 하나를 같이 쓴다.
+// build.py 가 server/lib/org.js 로 복사하므로 서버 쪽 사본은 직접 고치지 않는다.
+//
+// 규칙 한 줄 = [사업부(공백 제거), 적용시작월('YYYY-MM' 또는 null=처음부터), 본부(당시), 현재 본부(또는 null)]
+// - 그 달에 쓰는 줄: 같은 사업부의 줄 중 적용시작월이 그 달 이전인 가장 늦은 줄
+//   (그 달보다 이른 줄이 없으면 가장 이른 줄)
+// - 보고 당시 기준 본부 = 그 줄의 '본부(당시)'
+// - 현재 조직 기준 본부 = 그 줄의 '현재 본부', 비어 있으면 그 사업부의 가장 최근 줄의 본부
+//   (같은 이름이 시기마다 다른 팀일 때만 '현재 본부'를 채운다)
+(function (root, factory) {
+  const Org = factory();
+  if (typeof module === 'object' && module.exports) module.exports = Org;
+  else root.Org = Org;
+}(typeof self !== 'undefined' ? self : this, () => {
+  const norm = (s) => (s == null ? '' : String(s)).replace(/\s+/g, '');
+
+  function compile(rules) {
+    const by = new Map();
+    for (const [s, from, bu, cur] of rules || []) {
+      if (!s || !bu) continue;
+      if (!by.has(s)) by.set(s, []);
+      by.get(s).push({ from: from || null, bu, cur: cur || null });
+    }
+    for (const list of by.values()) list.sort((a, b) => (a.from || '').localeCompare(b.from || ''));
+    const at = (s, m) => {
+      const list = by.get(norm(s));
+      if (!list) return null;
+      let hit = list[0];
+      for (const r of list) if (!r.from || (m && r.from <= m)) hit = r;
+      return hit;
+    };
+    return {
+      reported: (s, m) => at(s, m)?.bu || null,
+      current: (s, m) => {
+        const r = at(s, m);
+        if (!r) return null;
+        const list = by.get(norm(s));
+        return r.cur || list[list.length - 1].bu;
+      },
+      // 그 달의 '보고 당시' 매핑 전체([사업부, 본부] 목록) — 월 확정 때 함께 저장한다.
+      snapshot: (m) => [...by.keys()].map((s) => [s, at(s, m).bu]),
+      // 이 이력에 등장하는 모든 본부(당시·현재)
+      allBus: () => [...new Set([...by.values()].flatMap((l) => l.flatMap((r) => [r.bu, r.cur]).filter(Boolean)))],
+      hasHistory: [...by.values()].some((l) => l.length > 1 || l.some((r) => r.cur)),
+    };
+  }
+
+  return { compile, norm };
+}));
+
+</script>
+<script>
 /* model.js */
 // 데이터 모델 — 엑셀 시트를 읽어 월 × 본부 실적을 계산한다.
 // 금액: ERP 원본은 원 단위, 입력용 엑셀과 화면은 '금액 단위'(기본 백만원) 기준.
@@ -433,7 +486,7 @@ const Model = (() => {
     const t = async (name, req) => (book.sheetNames.includes(name) ? table(await book.rows(name), req) || [] : []);
     const cfg = {
       company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, fundScope: 'everyone',
-      buOrder: [], plans: {}, plansReported: {}, buMap: new Map(), buMapFy: [], buMapReported: [], catMap: new Map(),
+      buOrder: [], plans: {}, plansReported: {}, orgRules: [], catMap: new Map(),
       people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(), access: [],
       problems: [],
     };
@@ -456,18 +509,16 @@ const Model = (() => {
       if (!reported && !cfg.buOrder.includes(bu)) cfg.buOrder.push(bu);
       ((reported ? cfg.plansReported : cfg.plans)[parseFy(r.get('연도')) ?? '*'] ||= {})[bu] = num(r.get('사업계획'));
     }
-    // '적용연도'(예: FY2025)를 적으면 그 회계연도 자료에만 쓰는 매핑(조직개편 전 사업부 이름 등). 비우면 모든 연도.
+    // 본부매핑 = 조직 변경 이력(src/org.js). 사업부 · 본부(당시) · 적용시작월(비우면 처음부터) · 현재 본부(비우면 최근 줄 따라감)
     for (const r of await t('본부매핑', ['사업부', '본부'])) {
       if (!text(r.get('사업부'))) continue;
-      const fy = parseFy(r.get('적용연도') ?? r.get('연도'));
-      if (fy) cfg.buMapFy.push([fy, norm(r.get('사업부')), text(r.get('본부'))]);
-      else cfg.buMap.set(norm(r.get('사업부')), text(r.get('본부')));
+      const fromRaw = text(r.get('적용시작월'));
+      const from = fromRaw ? parseMonth(fromRaw) : null;
+      if (fromRaw && !from) { cfg.problems.push(`입력용 '본부매핑' ${r.rowNo}행: 적용시작월 형식을 알 수 없습니다 (${fromRaw})`); continue; }
+      if (text(r.get('적용연도'))) cfg.problems.push(`입력용 '본부매핑' ${r.rowNo}행: '적용연도' 칸은 더 이상 쓰지 않습니다. '적용시작월'과 '현재 본부'로 적어 주세요.`);
+      cfg.orgRules.push([norm(r.get('사업부')), from, text(r.get('본부')), text(r.get('현재 본부')) || null]);
     }
-    // 보고 당시 본부 구성(지난 해를 확정할 때 저장할 매핑). 적용연도가 있어야 한다.
-    for (const r of await t('본부매핑(보고당시)', ['사업부', '본부', '적용연도'])) {
-      const fy = parseFy(r.get('적용연도'));
-      if (fy && text(r.get('사업부'))) cfg.buMapReported.push([fy, norm(r.get('사업부')), text(r.get('본부'))]);
-    }
+    if (book.sheetNames.includes('본부매핑(보고당시)')) cfg.problems.push("'본부매핑(보고당시)' 시트는 더 이상 쓰지 않습니다. '본부매핑'의 적용시작월로 기간별 본부를 적어 주세요.");
     for (const r of await t('중분류매핑', ['계약구분', '중분류'])) {
       const c = text(r.get('중분류'));
       if (text(r.get('계약구분'))) cfg.catMap.set(norm(r.get('계약구분')), c);
@@ -634,11 +685,11 @@ const Model = (() => {
     const snaps = new Map();
     for (const [m, d] of contracts) if (d.mapping) snaps.set(m, { bu: new Map(d.mapping.bu), cat: new Map(d.mapping.cat), at: d.mapping.at });
     const snapOf = (m) => (reported && m ? snaps.get(m) : null);
-    const buFy = new Map(cfg.buMapFy.map(([fy, k, bu]) => [`${fy}|${k}`, bu]));
+    const org = Org.compile(cfg.orgRules);
     const buOf = (s, m) => {
       const sp = snapOf(m);
       if (sp) return sp.bu.get(norm(s)) || UNMAPPED;
-      return (m && buFy.get(`${fyOfMonth(m, cfg.fyStart)}|${norm(s)}`)) || cfg.buMap.get(norm(s)) || UNMAPPED;
+      return (reported ? org.reported(s, m) : org.current(s, m)) || UNMAPPED;
     };
     const catOf = (s, m) => { const sp = snapOf(m); return (sp ? sp.cat.get(norm(s)) : cfg.catMap.get(norm(s))) || UNMAPPED; };
 
@@ -860,7 +911,7 @@ const Model = (() => {
 
     return {
       empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
-      hasSnapshots: snaps.size > 0, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
+      hasBasis: snaps.size > 0 || org.hasHistory, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
       loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
@@ -869,14 +920,14 @@ const Model = (() => {
   // ---- 설정값 주고받기(서버 버전) -----------------------------------------
   // Map 은 JSON 으로 보낼 수 없으므로 [키, 값] 배열로 바꾼다.
   function cfgToPlain(cfg) {
-    return { ...cfg, buMap: [...cfg.buMap], catMap: [...cfg.catMap], yoyReasons: [...cfg.yoyReasons],
+    return { ...cfg, catMap: [...cfg.catMap], yoyReasons: [...cfg.yoyReasons],
       reasons: Object.fromEntries(Object.entries(cfg.reasons).map(([m, mp]) => [m, [...mp]])) };
   }
   function cfgFromPlain(p) {
     const pairs = (v) => (Array.isArray(v) ? v.filter((x) => Array.isArray(x) && x.length === 2) : []);
-    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, buOrder: [], buMapFy: [], buMapReported: [], plansReported: {}, plans: {}, people: {}, fund: {},
+    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, buOrder: [], orgRules: [], plansReported: {}, plans: {}, people: {}, fund: {},
       prev: {}, arManual: {}, gijang: [], access: [], problems: [], ...p,
-      buMap: new Map(pairs(p.buMap)), catMap: new Map(pairs(p.catMap)), yoyReasons: new Map(pairs(p.yoyReasons)),
+      catMap: new Map(pairs(p.catMap)), yoyReasons: new Map(pairs(p.yoyReasons)),
       reasons: Object.fromEntries(Object.entries(p.reasons || {}).map(([m, v]) => [m, new Map(pairs(v))])) };
   }
 
@@ -888,13 +939,9 @@ const Model = (() => {
   const NUM_FIELDS = new Set(['계약', '매출', '금액']);
   const MAX_ROWS = 200000;
 
-  // 확정할 때의 본부·중분류 매핑(보고 당시 기준). 현재 매핑 + 그 회계연도 전용 매핑 + '본부매핑(보고당시)'.
+  // 확정할 때 저장하는 그 달의 '보고 당시' 매핑(본부매핑 이력 중 그 달에 유효한 줄 + 중분류매핑).
   function effectiveMapping(cfg, m) {
-    const fy = fyOfMonth(m, cfg.fyStart);
-    const bu = new Map(cfg.buMap);
-    for (const [f, k, b] of cfg.buMapFy) if (f === fy) bu.set(k, b);
-    for (const [f, k, b] of cfg.buMapReported || []) if (f === fy) bu.set(k, b);
-    return { bu: [...bu], cat: [...cfg.catMap], at: new Date().toISOString() };
+    return { bu: Org.compile(cfg.orgRules).snapshot(m), cat: [...cfg.catMap], at: new Date().toISOString() };
   }
 
   function exportSnapshot(datasets, upto, cfg) {
@@ -1268,7 +1315,7 @@ const Store = (() => {
           }, text: '처음으로' }),
         ])),
       tabs(),
-      res.basis === 'reported' ? el('div', { class: 'notice', text: `보고 당시 기준: 확정(🔒)할 때 저장한 본부매핑으로 나눈 숫자입니다${res.snapshotAt(state.sel.month) ? ` (이 달 저장 ${new Date(res.snapshotAt(state.sel.month)).toLocaleDateString('ko-KR')})` : ' — 이 달은 아직 확정 전이라 현재 매핑을 씁니다'}. 달마다 조직이 다를 수 있어 전월·전년 비교는 참고용입니다.` }) : null,
+      res.basis === 'reported' ? el('div', { class: 'notice', text: `보고 당시 기준: 그 달에 실제로 속했던 본부로 나눈 숫자입니다${res.snapshotAt(state.sel.month) ? ` (확정 때 저장한 매핑, ${new Date(res.snapshotAt(state.sel.month)).toLocaleDateString('ko-KR')})` : ' (본부매핑의 적용시작월 기준)'}. 달마다 조직이 다를 수 있어 전월·전년 비교는 참고용입니다.` }) : null,
       state.busy ? el('div', { class: 'warnings', text: state.busy }) : null,
       notices(),
       warnings([...state.errors, ...(SERVER ? [] : cfg.problems || []), ...(SERVER && !state.user?.admin ? [] : res.warnings)]),
@@ -1311,8 +1358,8 @@ const Store = (() => {
     return el('div', { class: 'filters' },
       el('div', { class: 'seg', role: 'group', 'aria-label': '본부 선택' }, bus.map((b) => el('button', {
         'aria-pressed': String(state.sel.bu === b), onclick: () => { state.sel.bu = b; render(); }, text: b }))),
-      res.hasSnapshots ? el('div', { class: 'seg', role: 'group', 'aria-label': '조직 기준 선택' }, [['current', '현재 조직 기준'], ['reported', '보고 당시 기준']].map(([k, label]) => el('button', {
-        'aria-pressed': String(res.basis === k), title: k === 'reported' ? '확정할 때 저장한 본부매핑으로 나눈 숫자' : '지금의 본부매핑으로 과거까지 다시 나눈 숫자',
+      res.hasBasis ? el('div', { class: 'seg', role: 'group', 'aria-label': '조직 기준 선택' }, [['current', '현재 조직 기준'], ['reported', '보고 당시 기준']].map(([k, label]) => el('button', {
+        'aria-pressed': String(res.basis === k), title: k === 'reported' ? '그 달에 실제로 속했던 본부로 나눈 숫자' : '지금의 조직으로 과거까지 다시 나눈 숫자',
         onclick: () => { state.sel.basis = k; rebuild(); }, text: label }))) : null,
       res.fys.length > 1 ? el('div', { class: 'seg', role: 'group', 'aria-label': '회계연도 선택' }, res.fys.map((fy) => el('button', {
         'aria-pressed': String(res.fyYear === fy), onclick: () => { state.sel.fy = fy; state.sel.month = null; rebuild(); }, text: `FY${fy}` }))) : null,

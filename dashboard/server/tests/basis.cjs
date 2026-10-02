@@ -1,6 +1,6 @@
 // 서버: 확정할 때 보고 당시 매핑 저장 → 이후 본부매핑을 바꿔도 보고 당시 기준은 그대로인지,
 // 백업·복구와 본부 권한 필터에도 유지되는지 확인한다(실적 파일은 인자로 받는다).
-// 사용법: NODE_PATH=... node tests/basis.cjs <입력용(본부매핑(보고당시) 포함).xlsx> <25.04 파일> <26.08 파일>
+// 사용법: NODE_PATH=... node tests/basis.cjs <입력용(본부매핑에 적용시작월·현재 본부 이력 포함).xlsx> <25.04 파일> <26.08 파일>
 'use strict';
 const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('node:child_process');
@@ -44,14 +44,13 @@ const start = () => new Promise((res, rej) => { srv = spawn(process.execPath, [p
   assert.equal(rep1['1본부'], 5428.2); assert.equal(rep1['4본부'], 11976.3); assert.equal(cur1['6팀'], 3131);
   const meta = await p.evaluate(() => window.__dashboard.state.monthMeta.map((x) => [x.month, !!x.mappingAt]));
   assert.ok(meta.every(([, has]) => has), '확정한 달마다 보고 당시 매핑 저장');
-  // 본부매핑을 바꿔 다시 올림: FY2025 서울4감사3 → 2본부 (현재 기준만 바뀌어야 함)
+  // 본부매핑을 바꿔 다시 올림: 옛 서울4감사3(적용시작월 빈 줄)의 현재 본부 → 2본부 (현재 기준만 바뀌어야 함)
   const changed = path.join(os.tmpdir(), `basis-input-${process.pid}.xlsx`);
   execFileSync('python3', ['-c', `
 import openpyxl
 wb=openpyxl.load_workbook(${JSON.stringify(inputPath)}); ws=wb['본부매핑']
 for r in ws.iter_rows(min_row=3):
-    if r[0].value=='서울4감사3' and r[2].value=='FY2025': r[1].value='2본부'
-del wb['본부매핑(보고당시)']
+    if r[0].value=='서울4감사3' and not r[2].value: r[3].value='2본부'
 wb.save(${JSON.stringify(changed)})`]);
   await upload([changed]);
   const cur2 = await read('current'); const rep2 = await read('reported');
