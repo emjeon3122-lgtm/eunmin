@@ -4,10 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository status
 
-- `pet_widget.py` — Windows-only desktop pet widget (stdlib-only: `tkinter` + `ctypes.windll`) that follows the system mouse cursor around the screen with a borderless, click-through, always-on-top transparent window. No pip dependencies.
-- `run_pet_widget.bat` — launcher for `pet_widget.py`. Uses `chcp 65001` + BOM-less UTF-8 per the BAT encoding guideline below.
+This repo holds two unrelated things:
 
-Run with: `python pet_widget.py` (or double-click `run_pet_widget.bat`) on Windows. Right-click the pet to quit. There is no build step, package manifest, or test suite yet — this container is headless Linux, so widget behavior can only be syntax-checked here (`python3 -m py_compile pet_widget.py`); functional verification requires an actual Windows desktop session. Update this file as more real code, structure, and tooling get added so future guidance stays accurate.
+1. **경조사 화환 자동 발송 앱** (`apps/api`, `apps/web`, `docs/`) — the main project. See
+   [`README.md`](./README.md) for how to run it and [`docs/`](./docs) for the full design spec
+   (architecture/DB, API, frontend wireframes, backend integration). Backend is NestJS + Prisma +
+   SQLite (single file at `apps/api/prisma/dev.db` — no DB server, no Docker; Prisma enums are
+   unsupported on SQLite so they live in `apps/api/src/common/enums.ts` as const objects);
+   frontend is Next.js 14 (App Router). SSO login and the Kakao 친구톡 vendor
+   dispatch are both behind swappable adapter interfaces and currently run against dev-mode Mock
+   implementations (`AUTH_MODE=mock`, `VENDOR_ADAPTER=mock`) since the real IdP/CPaaS aren't
+   chosen yet — see the README's "아직 실제 연동이 필요한 부분" section before wiring up
+   production credentials.
+2. `pet_widget.py` / `run_pet_widget.bat` — an unrelated, standalone Windows-only desktop pet
+   widget (stdlib-only: `tkinter` + `ctypes.windll`) that follows the system mouse cursor around
+   the screen with a borderless, click-through, always-on-top transparent window. No pip
+   dependencies. Run with `python pet_widget.py` (or double-click `run_pet_widget.bat`) on
+   Windows; right-click the pet to quit. This container is headless Linux, so it can only be
+   syntax-checked here (`python3 -m py_compile pet_widget.py`) — functional verification needs an
+   actual Windows desktop session.
+
+Update this file as the app's structure or tooling changes so future guidance stays accurate.
 
 ## Coding guidelines
 
