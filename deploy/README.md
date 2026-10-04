@@ -165,6 +165,35 @@ sudo docker compose up -d --build
   방식으로 백업한다면 `docker compose stop api` 후 복사하고 다시 `start` 하세요.
 - 복구: `docker compose down` → 폴더 복원 → `docker compose up -d`
 
+### Microsoft 365 로그인 켜기
+
+직원은 회사 Outlook 계정으로 로그인하고, **직원 명단(앱 DB)에 회사 이메일이 등록된 사람만**
+들어올 수 있습니다. 꽃집은 로그인하지 않습니다(주문별 링크만 사용).
+
+**1) Microsoft Entra 관리 센터에서 앱 등록** (전산 담당자)
+1. Entra ID → 앱 등록 → 새 등록
+   - 지원되는 계정 유형: **이 조직 디렉터리의 계정만**(단일 테넌트)
+   - 리디렉션 URI: 플랫폼 **웹**, `https://<도메인>/api/auth/oidc/callback`
+2. 인증서 및 암호 → 새 클라이언트 암호 발급(만료일 기록해 두기 — 만료되면 로그인이 멈춥니다)
+3. API 사용 권한: 기본 `User.Read`(로그인 확인용)만 있으면 됩니다. 메일·파일 권한은 필요 없습니다.
+
+**2) `.env` 입력** (값은 전산 담당자가 직접 입력)
+
+```sh
+AUTH_MODE=oidc
+OIDC_ISSUER=https://login.microsoftonline.com/<디렉터리(테넌트) ID>/v2.0
+OIDC_CLIENT_ID=<애플리케이션(클라이언트) ID>
+OIDC_CLIENT_SECRET=<클라이언트 암호 값>
+OIDC_REDIRECT_URI=https://<도메인>/api/auth/oidc/callback
+ALLOW_DEV_LOGIN=false
+```
+
+`sudo docker compose up -d`로 다시 시작하면 로그인 화면에 "Microsoft 365로 로그인" 버튼이
+나옵니다. 값이 하나라도 비어 있으면 api가 시작되지 않고 로그에 이유가 표시됩니다.
+
+- 처음 로그인할 때 회사 이메일로 직원 명단과 연결되고, 이후로는 Microsoft 계정 고유값으로 찾습니다.
+- 명단에 없는 계정은 "직원 명단에 등록되지 않은 계정입니다"로 거부되고 api 로그에 남습니다.
+
 ### 알림톡 실제 발송으로 전환
 `.env`에 솔라피 값을 넣고 `VENDOR_ADAPTER=kakao`로 바꾼 뒤 `sudo docker compose up -d`로 다시
 시작합니다. 값은 솔라피 계정 담당자가 콘솔에서 확인해 직접 입력합니다.
@@ -192,8 +221,8 @@ https://<도메인>/api/webhooks/solapi/<KAKAO_WEBHOOK_SECRET 값>
 
 ## 6. 시험 운영 시 참고
 
-Microsoft 365 로그인 연동 전에는 정식 로그인 수단이 없습니다. 시험할 때만 아래처럼 개발용
-사번 로그인을 켤 수 있습니다.
+Microsoft 365 로그인을 켜기 전(또는 직원 명단 등록 전)에는 정식 로그인 수단이 없습니다.
+시험할 때만 아래처럼 개발용 사번 로그인을 켤 수 있습니다(`AUTH_MODE=mock`일 때만 동작).
 
 ```sh
 # .env
@@ -220,4 +249,4 @@ sudo docker compose exec api node dist-seed/seed.js
 ## 8. 아직 남은 개발 작업
 
 배포 구성과 별개로, 정식 오픈 전에 아래 작업이 이어집니다.
-- Microsoft 365 로그인 (연동 값은 전산 담당자가 `.env`의 `OIDC_*`에 직접 입력)
+- 직원 명단 등록 기능 (Microsoft 365 로그인은 명단의 회사 이메일과 대조하므로 실제 직원 명단이 필요)

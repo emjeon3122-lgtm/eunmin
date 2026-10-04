@@ -11,11 +11,13 @@ This repo holds two unrelated things:
    (architecture/DB, API, frontend wireframes, backend integration). Backend is NestJS + Prisma +
    SQLite (single file at `apps/api/prisma/dev.db` — no DB server, no Docker; Prisma enums are
    unsupported on SQLite so they live in `apps/api/src/common/enums.ts` as const objects);
-   frontend is Next.js 14 (App Router). SSO login and the Kakao 친구톡 vendor
-   dispatch are both behind swappable adapter interfaces and currently run against dev-mode Mock
-   implementations (`AUTH_MODE=mock`, `VENDOR_ADAPTER=mock`) since the real IdP/CPaaS aren't
-   chosen yet — see the README's "아직 실제 연동이 필요한 부분" section before wiring up
-   production credentials.
+   frontend is Next.js 14 (App Router). Login is Microsoft 365 (Entra ID) via standard OIDC +
+   PKCE (`apps/api/src/auth/oidc.service.ts`, `AUTH_MODE=oidc`); users are matched to the `users`
+   table by company email on first login, then by `ssoSubjectId` (`oidc:<oid>`), and unknown
+   accounts are rejected. Local dev uses `AUTH_MODE=mock` + employee-number dev login. Vendor
+   dispatch is Solapi Kakao 알림톡 behind the `VendorAdapter` interface (`VENDOR_ADAPTER=mock`
+   until real credentials are entered); delivery reports arrive at
+   `/api/webhooks/solapi/<KAKAO_WEBHOOK_SECRET>`.
 
    **Production runs in Docker on the company's Synology NAS** (DS1019+, linux/amd64) behind a
    Cloudflare Tunnel — see [`deploy/README.md`](./deploy/README.md). `deploy/docker-compose.yml`

@@ -66,9 +66,11 @@ SSO는 여전히 미정이라 어댑터 인터페이스를 분리해 **개발용
 아직 없어 마찬가지로 Mock으로 동작 중입니다. 실제 값이 정해지면 아래 두 지점만 교체하면
 됩니다.
 
-1. **SSO 로그인** — 회사 IdP가 미정이라, `AUTH_MODE=mock`일 때 `POST /api/auth/dev-login`으로
-   사번만으로 로그인합니다. 실제 OIDC 공급자가 정해지면 `apps/api/src/auth`에 OIDC 콜백
-   로직을 추가하고 `AUTH_MODE=oidc`로 전환하면 됩니다.
+1. **로그인(Microsoft 365)** — 구현 완료(`apps/api/src/auth/oidc.service.ts`, 표준 OIDC +
+   PKCE). `AUTH_MODE=oidc`와 `OIDC_*` 값(전산 담당자가 Entra ID 앱 등록 후 입력)을 넣으면
+   켜지고, 직원 명단(users)의 회사 이메일과 대조해 등록된 사람만 들어옵니다. 설정 방법은
+   [`deploy/README.md`](./deploy/README.md) "Microsoft 365 로그인 켜기". 로컬 개발은 그대로
+   `AUTH_MODE=mock` + 사번 로그인(`POST /api/auth/dev-login`)입니다.
 2. **꽃집 발송(Solapi 알림톡)** — `VENDOR_ADAPTER=mock`일 때는 실제 발송 없이 로그만 남기고
    항상 성공 처리합니다. Solapi 계약/API 키가 준비되면
    `apps/api/src/vendor/solapi-alimtalk.adapter.ts`의 엔드포인트/필드명·사전 심사된

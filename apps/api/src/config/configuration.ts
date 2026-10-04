@@ -92,6 +92,12 @@ export function assertProductionConfig(config: AppConfig): void {
   if (config.jwtSecret === DEFAULT_JWT_SECRET || config.jwtSecret.length < 32) {
     problems.push('JWT_SECRET을 32자 이상의 임의 문자열로 지정하세요.');
   }
+  if (config.authMode === 'oidc') {
+    const { issuer, clientId, clientSecret, redirectUri } = config.oidc;
+    if (!issuer || !clientId || !clientSecret || !redirectUri) {
+      problems.push('AUTH_MODE=oidc이면 OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URI가 모두 필요합니다.');
+    }
+  }
   if (!config.appBaseUrl.startsWith('https://')) {
     problems.push('APP_BASE_URL을 실제 접속 주소(https://...)로 지정하세요. 알림톡 링크에 쓰입니다.');
   }
