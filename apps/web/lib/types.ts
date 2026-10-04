@@ -170,6 +170,27 @@ export interface VendorStatusData {
   invitationPhotoUrls?: string[];
 }
 
+// 관리자 > 직원 명단
+export interface RosterUser {
+  employeeNo: string;
+  name: string;
+  department: string;
+  email: string;
+  phone: string | null;
+  isPartner: boolean;
+  role: UserRole;
+  loginLinked: boolean; // Microsoft 365로 한 번이라도 로그인해 계정이 연결됐는지
+}
+
+export interface RosterImportResult {
+  applied: boolean;
+  total: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  errors: { row: number; message: string }[];
+}
+
 export interface AppNotification {
   id: string;
   requestId: string | null;

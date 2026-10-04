@@ -9,6 +9,8 @@ import { AdminExportController } from './admin-export.controller';
 import { AdminExportService } from './admin-export.service';
 import { AdminVendorsController } from './admin-vendors.controller';
 import { AdminApprovalRulesController } from './admin-approval-rules.controller';
+import { AdminUsersController } from './admin-users.controller';
+import { AdminUsersService } from './admin-users.service';
 
 @Module({
   imports: [AuthModule, NotificationsModule, StorageModule, WreathRequestsModule],
@@ -17,7 +19,8 @@ import { AdminApprovalRulesController } from './admin-approval-rules.controller'
     AdminExportController,
     AdminVendorsController,
     AdminApprovalRulesController,
+    AdminUsersController,
   ],
-  providers: [AdminWreathRequestsService, AdminExportService],
+  providers: [AdminWreathRequestsService, AdminExportService, AdminUsersService],
 })
 export class AdminModule {}

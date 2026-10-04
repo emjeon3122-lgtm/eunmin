@@ -14,7 +14,9 @@ This repo holds two unrelated things:
    frontend is Next.js 14 (App Router). Login is Microsoft 365 (Entra ID) via standard OIDC +
    PKCE (`apps/api/src/auth/oidc.service.ts`, `AUTH_MODE=oidc`); users are matched to the `users`
    table by company email on first login, then by `ssoSubjectId` (`oidc:<oid>`), and unknown
-   accounts are rejected. Local dev uses `AUTH_MODE=mock` + employee-number dev login. Vendor
+   accounts are rejected. The roster is maintained by admins via Excel round-trip at
+   `/admin/users` (`admin-users.service.ts`: dry-run preview, all-or-nothing apply, never deletes);
+   the very first admin is created with `node dist/scripts/create-admin.js`. Local dev uses `AUTH_MODE=mock` + employee-number dev login. Vendor
    dispatch is Solapi Kakao 알림톡 behind the `VendorAdapter` interface (`VENDOR_ADAPTER=mock`
    until real credentials are entered); delivery reports arrive at
    `/api/webhooks/solapi/<KAKAO_WEBHOOK_SECRET>`.

@@ -13,6 +13,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   cancelled: "Microsoft 로그인이 취소되었습니다.",
   expired: "로그인 시간이 초과되었습니다. 다시 시도해주세요.",
   failed: "로그인 확인에 실패했습니다. 다시 시도해주세요.",
+  unavailable: "Microsoft 로그인 서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.",
 };
 
 export default function LoginPage() {

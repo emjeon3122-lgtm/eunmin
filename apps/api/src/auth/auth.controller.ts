@@ -73,7 +73,14 @@ export class AuthController {
     if (this.authMode !== 'oidc') {
       throw new NotFoundException();
     }
-    const { url, transaction } = await this.oidcService.startLogin(safeNext(next));
+    let started;
+    try {
+      started = await this.oidcService.startLogin(safeNext(next));
+    } catch {
+      // 공급자 정보를 못 가져온 경우(네트워크·설정 오류) — 오류 화면 대신 로그인 화면에 안내한다.
+      return this.redirectToLogin(res, 'unavailable');
+    }
+    const { url, transaction } = started;
     res.cookie(OIDC_TX_COOKIE, transaction, {
       httpOnly: true,
       // Microsoft에서 돌아오는 이동(다른 사이트 → 우리 사이트 GET)에도 쿠키가 실리려면 lax여야 한다.
