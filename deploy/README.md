@@ -67,27 +67,43 @@ DATA_DIR/
 
 ## 3. 설치
 
-SSH로 NAS에 접속해 진행합니다.
+SSH로 NAS에 접속해 진행합니다. 소스는 앱 폴더 안의 `app`에 두고, 데이터 폴더(`data`)와 분리합니다.
+
+### 3-1. 소스 받기 (둘 중 하나)
+
+**압축 파일로 받은 경우** — File Station으로 압축 파일을 `/volume1/wreath-app`에 올린 뒤:
 
 ```sh
-# 1) 소스 받기 — 앱 폴더 안에 둡니다(데이터 폴더와 분리)
+cd /volume1/wreath-app
+mkdir app && cd app
+7z x ../wreath-app-*.zip      # 또는 File Station에서 app 폴더에 압축 풀기
+```
+
+**GitHub에서 받는 경우:**
+
+```sh
 cd /volume1/wreath-app
 git clone -b <배포 브랜치> <저장소 주소> app
-cd app/deploy
+```
 
-# 2) 설정 파일 만들기
+### 3-2. 설정 및 실행 (공통)
+
+```sh
+cd /volume1/wreath-app/app/deploy
+
+# 1) 설정 파일 만들기
 cp .env.example .env
 vi .env          # 아래 "필수 설정" 참고
 
-# 3) 빌드 및 실행 (첫 빌드는 DS1019+ 기준 수 분~10분 정도 걸립니다)
+# 2) 빌드 및 실행 (첫 빌드는 DS1019+ 기준 수 분~10분 정도 걸립니다)
 sudo docker compose up -d --build
 
-# 4) 상태 확인 — api, web, cloudflared 모두 Up (healthy)이면 정상
+# 3) 상태 확인 — api, web, cloudflared 모두 Up (healthy)이면 정상
 sudo docker compose ps
 ```
 
 Container Manager 화면을 쓰려면: 프로젝트 → 생성 → 경로에 `.../app/deploy` 선택 → 기존
-`docker-compose.yml` 사용. (`.env`는 위 2단계처럼 먼저 만들어 둡니다.)
+`docker-compose.yml` 사용. (`.env`는 위 1단계처럼 먼저 만들어 둡니다.)
 
 ### 필수 설정 (`.env`)
 
@@ -107,6 +123,16 @@ Container Manager 화면을 쓰려면: 프로젝트 → 생성 → 경로에 `..
 - `https://<도메인>/login` 화면이 열리는지 확인
 
 ## 4. 업데이트
+
+**압축 파일로 받은 경우:** 새 압축 파일의 내용으로 `app` 폴더를 덮어쓰되, **`deploy/.env`는
+그대로 둡니다**(압축 파일에는 `.env`가 들어있지 않으므로 덮어써도 지워지지 않습니다). 그다음:
+
+```sh
+cd /volume1/wreath-app/app/deploy
+sudo docker compose up -d --build
+```
+
+**GitHub에서 받는 경우:**
 
 ```sh
 cd /volume1/wreath-app/app
