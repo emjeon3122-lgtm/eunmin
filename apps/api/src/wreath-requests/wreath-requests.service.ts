@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, WreathRequest } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendToVendorService } from '../jobs/send-to-vendor.service';
@@ -30,6 +31,11 @@ export class WreathRequestsService {
   // 기존 금액 기준 approval_rules 엔진은 더 이상 이 흐름에서 쓰지 않는다 —
   // 관리자 화면/테이블 자체는 남겨뒀지만 제출 시 참조하지 않는다.
   async create(dto: CreateWreathRequestDto, requesterId: string) {
+    // 이미 같은 화면에서 제출된 신청이면 새로 만들지 않고 그대로 돌려준다 — 이 경우
+    // 꽃집 발송도 다시 일어나지 않는다.
+    const existing = await this.findByClientRequestId(requesterId, dto.clientRequestId);
+    if (existing) return toCreateResponse(existing);
+
     const requester = await this.prisma.user.findUniqueOrThrow({ where: { id: requesterId } });
     const requiresPreApproval = !requester.isPartner;
 
@@ -53,37 +59,48 @@ export class WreathRequestsService {
       vendorId = defaultVendor?.id ?? null;
     }
 
-    const request = await this.prisma.wreathRequest.create({
-      data: {
-        requesterId,
-        requestType: dto.requestType,
-        occasionType: dto.occasionType,
-        weddingSide: dto.weddingSide,
-        orchidType: dto.orchidType,
-        recipientName: dto.recipientName,
-        recipientPhone: dto.recipientPhone,
-        ordererPhone: dto.ordererPhone,
-        deliveryAddress: dto.deliveryAddress,
-        deliveryDetail: dto.deliveryDetail,
-        desiredArrivalAt: new Date(dto.desiredArrivalAt),
-        ribbonMessage: dto.ribbonMessage,
-        ribbonSenderText: dto.ribbonSenderText,
-        declaredAmount: dto.declaredAmount ?? null,
-        memo: dto.memo,
-        invitationUrl: dto.invitationUrl,
-        clientName: dto.clientName,
-        contractType: dto.contractType,
-        serviceName: dto.serviceName,
-        sendReason: dto.sendReason,
-        costCode: dto.costCode,
-        requiresPreApproval,
-        attachmentId: dto.attachmentId ?? null,
-        status: 'submitted',
-        vendorId,
-        productId: dto.productId ?? null,
-        vendorStatusToken: generateVendorStatusToken(),
-      },
-    });
+    let request: WreathRequest;
+    try {
+      request = await this.prisma.wreathRequest.create({
+        data: {
+          requesterId,
+          clientRequestId: dto.clientRequestId,
+          requestType: dto.requestType,
+          occasionType: dto.occasionType,
+          weddingSide: dto.weddingSide,
+          orchidType: dto.orchidType,
+          recipientName: dto.recipientName,
+          recipientPhone: dto.recipientPhone,
+          ordererPhone: dto.ordererPhone,
+          deliveryAddress: dto.deliveryAddress,
+          deliveryDetail: dto.deliveryDetail,
+          desiredArrivalAt: new Date(dto.desiredArrivalAt),
+          ribbonMessage: dto.ribbonMessage,
+          ribbonSenderText: dto.ribbonSenderText,
+          declaredAmount: dto.declaredAmount ?? null,
+          memo: dto.memo,
+          invitationUrl: dto.invitationUrl,
+          clientName: dto.clientName,
+          contractType: dto.contractType,
+          serviceName: dto.serviceName,
+          sendReason: dto.sendReason,
+          costCode: dto.costCode,
+          requiresPreApproval,
+          attachmentId: dto.attachmentId ?? null,
+          status: 'submitted',
+          vendorId,
+          productId: dto.productId ?? null,
+          vendorStatusToken: generateVendorStatusToken(),
+        },
+      });
+    } catch (err) {
+      // 두 요청이 거의 동시에 들어와 앞선 요청이 먼저 저장된 경우 — 그 신청을 돌려준다.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const winner = await this.findByClientRequestId(requesterId, dto.clientRequestId);
+        if (winner) return toCreateResponse(winner);
+      }
+      throw err;
+    }
 
     // 청첩장 사진은 자동 채우기 단계에서 이미 저장돼 있으므로 신청서에 연결만 한다.
     // where 조건으로 "본인이 올린, 아직 어느 신청에도 붙지 않은 청첩장 사진"만
@@ -106,12 +123,14 @@ export class WreathRequestsService {
       this.logger.error(`send-to-vendor 비동기 처리 실패 (requestId=${request.id})`, err);
     });
 
-    return {
-      id: request.id,
-      status: request.status,
-      requiresPreApproval: request.requiresPreApproval,
-      createdAt: request.createdAt,
-    };
+    return toCreateResponse(request);
+  }
+
+  private findByClientRequestId(requesterId: string, clientRequestId: string | undefined) {
+    if (!clientRequestId) return null;
+    return this.prisma.wreathRequest.findUnique({
+      where: { requesterId_clientRequestId: { requesterId, clientRequestId } },
+    });
   }
 
   async findMine(requesterId: string, page: number, size: number) {
@@ -232,4 +251,13 @@ export class WreathRequestsService {
       createdAt: request.createdAt,
     };
   }
+}
+
+function toCreateResponse(request: WreathRequest) {
+  return {
+    id: request.id,
+    status: request.status,
+    requiresPreApproval: request.requiresPreApproval,
+    createdAt: request.createdAt,
+  };
 }

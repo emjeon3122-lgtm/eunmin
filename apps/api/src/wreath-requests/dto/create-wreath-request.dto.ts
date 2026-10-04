@@ -83,6 +83,11 @@ export class CreateWreathRequestDto {
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   invitationUrl?: string;
 
+  // 같은 신청 화면에서의 재제출을 한 건으로 묶는 멱등 키(신청 화면이 열릴 때 생성).
+  @IsOptional()
+  @IsUUID()
+  clientRequestId?: string;
+
   // 자동 채우기에 쓴 청첩장/부고장 사진(POST /api/invitation-parser/parse가 돌려준 id).
   // 신청자 본인이 올린 청첩장 사진만 연결된다 — 검증은 서비스에서 한다.
   @IsOptional()

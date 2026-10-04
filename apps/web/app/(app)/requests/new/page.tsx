@@ -126,6 +126,9 @@ export default function NewWreathRequestPage() {
   const [step, setStep] = useState(1);
   const [proofAttachmentId, setProofAttachmentId] = useState<string | null>(null);
   const [invitationAttachmentIds, setInvitationAttachmentIds] = useState<string[]>([]);
+  // 이 신청 화면 고유 번호 — 중복 클릭이나 응답 유실 후 재시도로 같은 신청이 두 번
+  // 접수되지 않도록 서버가 이 값으로 한 건으로 묶는다(꽃집 알림톡도 한 번만 발송).
+  const [clientRequestId] = useState(() => crypto.randomUUID());
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -281,6 +284,7 @@ export default function NewWreathRequestPage() {
         invitationUrl: values.invitationUrl || undefined,
         invitationAttachmentIds: invitationAttachmentIds.length ? invitationAttachmentIds : undefined,
         attachmentId: proofAttachmentId,
+        clientRequestId,
       });
       router.push(`/requests/${res.data.id}`);
     } catch (err) {
