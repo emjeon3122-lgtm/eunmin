@@ -228,6 +228,23 @@ https://<도메인>/api/webhooks/solapi/<KAKAO_WEBHOOK_SECRET 값>
 - 등록 후 솔라피 콘솔의 "테스트 이벤트 전송"을 실행하고 `docker compose logs api`에서 수신
   여부를 확인해 주세요(솔라피 리포트 형식이 예상과 다르면 로그에 경고가 남습니다).
 
+### 청첩장 AI 자동 채우기 켜기
+직원이 올린 청첩장·부고장 사진이나 링크를 Anthropic(Claude) API로 보내 배송 정보를 미리
+채워주는 기능입니다(유료, 사용량만큼 과금). 기본은 꺼져 있어 아무것도 외부로 나가지 않습니다.
+청첩장 내용(개인정보)이 외부로 전송되므로 사내 확인 후 켜 주세요.
+
+```sh
+INVITATION_PARSER=claude
+ANTHROPIC_API_KEY=<Anthropic 콘솔에서 발급한 키>
+```
+
+`sudo docker compose up -d`로 다시 시작하면 api 로그에 `청첩장 자동 채우기: Claude 어댑터 사용`이
+나옵니다. 키가 비어 있으면 경고 후 꺼진 상태로 동작합니다(신청 자체는 정상).
+
+- 나가는 연결: `api.anthropic.com:443`, 그리고 링크로 채울 때는 직원이 입력한 청첩장 사이트(80/443).
+- 링크를 열 때 앱이 **내부망 주소(사설 IP·루프백·NAS·Docker 망 등)는 스스로 차단**합니다.
+  차단되면 api 로그에 `차단된 청첩장 URL입니다`가 남습니다.
+
 ## 6. 시험 운영 시 참고
 
 Microsoft 365 로그인을 켜기 전(또는 직원 명단 등록 전)에는 정식 로그인 수단이 없습니다.
@@ -261,3 +278,4 @@ sudo docker compose exec api node dist-seed/seed.js
 - 직원 명단 엑셀 업로드(관리자 화면 "직원 명단")
 - 꽃집 정보 입력(관리자 화면 "설정" — 실제 꽃집 연락처)
 - 솔라피 값 입력 후 `VENDOR_ADAPTER=kakao` 전환, 테스트 이벤트로 결과 수신 확인
+- (사내 확인 후) Anthropic API 키 입력 후 `INVITATION_PARSER=claude` 전환 — 위 "청첩장 AI 자동 채우기 켜기"
