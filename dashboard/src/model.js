@@ -234,13 +234,12 @@ const Model = (() => {
             매출: num(r.get('조정후매출액')),
           });
         }
-        // 기준월 = 등록일자 중 가장 늦은 달. 다만 회계연도 마지막 달(3월) 파일은 결산 건이 다음 달(4월)에
-        // 등록되므로, 파일 이름이 그 마지막 달이고 등록일자가 바로 다음 달까지만 있으면 파일 이름의 달을 쓴다.
+        // 기준월 = 등록일자 중 가장 늦은 달. 다만 마감 후 다음 달 초에 등록된 건이 섞여 있을 수 있으므로
+        // (예: 3월 결산 건이 4월에, 6월 건이 7/2에 등록), 파일 이름의 달 바로 다음 달까지만 있으면 파일 이름의 달을 쓴다.
         let month = asOf ? asOf.slice(0, 7) : nameMonth;
         let monthNote = '';
-        const lastOfFy = String(((fyStart + 10) % 12) + 1).padStart(2, '0');
-        if (asOf && nameMonth && nameMonth.slice(5) === lastOfFy && addMonths(nameMonth, 1) === month) {
-          monthNote = `파일 이름 기준(등록일자는 ${monthLabel(month)}까지 있음 — 결산 추가 등록)`;
+        if (asOf && nameMonth && addMonths(nameMonth, 1) === month) {
+          monthNote = `파일 이름 기준(등록일자는 ${monthLabel(month)}까지 있음 — 다음 달 초 추가 등록)`;
           month = nameMonth;
         }
         found.push({ kind: 'contract', fileName, sheetName: name, rows: list, asOf, manual, noId: manual.length, month, ...(monthNote ? { monthNote } : {}) });
