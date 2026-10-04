@@ -173,7 +173,7 @@ section.block h3 { font-size: 15px; margin: 0 0 8px; }
 <body>
 <div class="wrap" id="app"></div>
 <script>
-const DASHBOARD_VERSION = '2026.10.04-4';
+const DASHBOARD_VERSION = '2026.10.04-5';
 const DASHBOARD_MODE = 'server';
 </script>
 <script>
@@ -1671,8 +1671,8 @@ const Store = (() => {
   }
 
   // ---- 전년 대비 분석 ------------------------------------------------------
+  const TOP_N = 15; // 주요 계약 목록에 보여 줄 건수
   // 합계는 입력용 '전년실적'(공식 값) 기준, 중분류·계약 내역은 작년 같은 달 ERP 원본 기준.
-  const TOP_N = 15;
   function yoyView(res, cur) {
     const F = state.field; const m = state.sel.month; const cat = state.sel.cat;
     const pm = Model.addMonths(m, -12);
@@ -1710,24 +1710,17 @@ const Store = (() => {
     }
     box.append(trend);
 
-    // 중분류별: 전월 대비 + 전년 대비
+    // 중분류별 전년 대비
     const y = res.yoyDetail(m);
     const inBu = (r) => state.sel.bu === TOTAL || r.본부 === state.sel.bu;
     const curRows = y.ok ? y.cur.filter(inBu) : [];
     const prvRows = y.ok ? y.prv.filter(inBu) : [];
     const pyCat = y.ok ? res.sumByCat(prvRows, F) : null;
-    const pmX = res.isFirst(m) ? null : res.metric(res.before(m), state.sel.bu);
-    const momOf = (c) => {
-      if (res.isFirst(m)) return valOf(cur, F, c); // 회계연도 첫 달: 누적이 새로 시작
-      const b = valOf(pmX, F, c); const n = valOf(cur, F, c);
-      return n != null && b != null ? n - b : null;
-    };
     const pyOf = (c) => (!pyCat ? null : c ? pyCat[c] : Object.values(pyCat).reduce((s, v) => s + v, 0));
     const catRow = (c) => {
       const now = valOf(cur, F, c); const py = pyOf(c);
       return el('tr', { class: !c ? 'total' : cat === c ? 'selected' : '', style: 'cursor:pointer', onclick: () => (c ? setCat(c) : (state.sel.cat = null, render())) },
         el('td', { text: c || '합계' }), el('td', { class: 'num', text: fmt(now) }),
-        el('td', { class: 'num' }, delta(momOf(c))),
         el('td', { class: 'num', text: fmt(py) }), el('td', { class: 'num' }, delta(now != null && py != null ? now - py : null)),
         el('td', { class: 'num', text: pctSigned(rate(now, py)) }),
         el('td', { class: 'wrap-text' }, (() => {
@@ -1737,8 +1730,8 @@ const Store = (() => {
         })()));
     };
     box.append(el('section', { class: 'block' },
-      el('h3', { text: `중분류별 전월·전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
-      simpleTable(['중분류', `당월 ${F}`, '전월대비', `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
+      el('h3', { text: `중분류별 전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
+      simpleTable(['중분류', `당월 ${F}`, `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
     if (y.ok) {
       const review = res.yoyReviewList(m);
       const need = review.rows.filter((r) => r.검토 && !r.사유).length;
@@ -1765,18 +1758,6 @@ const Store = (() => {
       el('div', { class: 'k', text: '전년대비 사유' }),
       reason ? el('div', { style: 'white-space:pre-wrap;font-size:15px', text: reason })
         : el('div', { class: 'muted', text: `입력용.xlsx '전년대비사유' 시트에 월(${monthLabel(m)})·본부(${state.sel.bu})·중분류(${cat || '비움'})·사유를 적으면 여기에 표시됩니다.` })));
-
-    // 전월 대비 주요 변동 계약
-    const md = res.momDetail(m, F);
-    if (md.ok) {
-      const rows = md.rows.filter((r) => inBu(r) && (!cat || r.중분류 === cat));
-      drill.append(el('h3', { text: `전월 대비 주요 변동 계약 (${monthLabel(md.prevMonth)} → ${monthLabel(m)}, 상위 ${Math.min(TOP_N, rows.length)}건 / 전체 ${rows.length}건)` }),
-        el('div', { class: 'cards-row' }, ...kindSums(rows)),
-        momRowsTable(rows.slice(0, TOP_N)),
-        el('div', { class: 'toolbar' }, el('button', { class: 'btn', onclick: () => { state.tab = 'mom'; render(); }, text: '전월 대비 분석 탭에서 전체 보기' })));
-    } else {
-      drill.append(el('p', { class: 'muted', text: md.why }));
-    }
 
     // 전년 대비 구성과 주요 계약
     if (y.ok) {
