@@ -50,6 +50,18 @@ const Model = (() => {
     return mo >= 1 && mo <= 12 ? monthKey(y, mo) : null;
   }
 
+  // 파일 이름의 월: 'FY2025.3월'(회계연도 + 월, 시작월 이전 달은 다음 해) 또는 '(26.08)'·'26.08월'
+  function monthFromFileName(name, fyStart = 4) {
+    const s = text(name);
+    const fy = s.match(/FY\s*(\d{4})\s*[.\-_ ]\s*(\d{1,2})\s*월/i);
+    if (fy) {
+      const mo = Number(fy[2]);
+      return mo >= 1 && mo <= 12 ? monthKey(Number(fy[1]) + (mo < fyStart ? 1 : 0), mo) : null;
+    }
+    const ym = s.match(/(?:^|[^\d])(\d{2})\.(\d{1,2})(?!\d)/);
+    return ym ? parseMonth(`${ym[1]}.${ym[2]}`) : null;
+  }
+
   // 'FY2026', 2026, '26' → 2026
   function parseFy(v) {
     const m = text(v).match(/(\d{4}|\d{2})/);
@@ -194,7 +206,8 @@ const Model = (() => {
     return { 사업부: text(r.get('사업부')), 계약구분: text(r.get('계약구분')) || text(r.get('계약종류')) || '기장', 계약, 매출, 메모: text(r.get('사유')) };
   }
 
-  async function readDataBook(book, fileName) {
+  async function readDataBook(book, fileName, fyStart = 4) {
+    const nameMonth = monthFromFileName(fileName, fyStart);
     const found = [];
     let summaryManual = [];
     for (const name of book.sheetNames) {
@@ -221,8 +234,16 @@ const Model = (() => {
             매출: num(r.get('조정후매출액')),
           });
         }
-        found.push({ kind: 'contract', fileName, sheetName: name, rows: list, asOf, manual, noId: manual.length,
-          month: asOf ? asOf.slice(0, 7) : parseMonth(fileName) });
+        // 기준월 = 등록일자 중 가장 늦은 달. 다만 회계연도 마지막 달(3월) 파일은 결산 건이 다음 달(4월)에
+        // 등록되므로, 파일 이름이 그 마지막 달이고 등록일자가 바로 다음 달까지만 있으면 파일 이름의 달을 쓴다.
+        let month = asOf ? asOf.slice(0, 7) : nameMonth;
+        let monthNote = '';
+        const lastOfFy = String(((fyStart + 10) % 12) + 1).padStart(2, '0');
+        if (asOf && nameMonth && nameMonth.slice(5) === lastOfFy && addMonths(nameMonth, 1) === month) {
+          monthNote = `파일 이름 기준(등록일자는 ${monthLabel(month)}까지 있음 — 결산 추가 등록)`;
+          month = nameMonth;
+        }
+        found.push({ kind: 'contract', fileName, sheetName: name, rows: list, asOf, manual, noId: manual.length, month, ...(monthNote ? { monthNote } : {}) });
         continue;
       }
       const st = table(rows, SUMMARY_HEADERS);
@@ -598,5 +619,5 @@ const Model = (() => {
     return { datasets: out, upto: parseMonth(o.upto), createdAt: text(o.createdAt), input };
   }
 
-  return { TOTAL, UNMAPPED, PEOPLE, isInputBook, readInput, readDataBook, build, exportSnapshot, readSnapshot, effectiveMapping, cfgToPlain, cfgFromPlain, norm, monthLabel, parseMonth, addMonths };
+  return { TOTAL, UNMAPPED, PEOPLE, isInputBook, readInput, readDataBook, monthFromFileName, build, exportSnapshot, readSnapshot, effectiveMapping, cfgToPlain, cfgFromPlain, norm, monthLabel, parseMonth, addMonths };
 })();

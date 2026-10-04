@@ -112,7 +112,7 @@
         }
         const book = await XlsxReader.open(buf);
         if (Model.isInputBook(book)) { cfg = await Model.readInput(book); cfg.fileName = f.name; continue; }
-        const found = await Model.readDataBook(book, f.name);
+        const found = await Model.readDataBook(book, f.name, (cfg || state.cfg)?.fyStart);
         if (!found.length) state.errors.push(`'${f.name}': 계약·매출(ERP) 시트나 미수금 시트를 찾지 못했습니다.`);
         for (const d of found) {
           if (d.month) datasets.push(d);
@@ -172,7 +172,7 @@
           state.files = state.files.filter((x) => !x.input);
           state.files.push({ name: f.name, buf, input: true });
         } else {
-          const found = await Model.readDataBook(book, f.name);
+          const found = await Model.readDataBook(book, f.name, state.cfg?.fyStart);
           if (!found.length) state.errors.push(`'${f.name}': 계약·매출(ERP) 시트나 미수금 시트를 찾지 못했습니다.`);
           state.datasets = state.datasets.filter((d) => d.fileName !== f.name);
           state.datasets.push(...found);
@@ -850,7 +850,7 @@
               monthOptions.map((m) => el('option', { value: m, selected: d.month === m, text: monthLabel(m) })));
             sel.addEventListener('change', () => { d.month = sel.value || null; rebuild(); if (state.persist) persist(); });
             return el('tr', {}, el('td', { text: d.fileName }), el('td', { text: d.sheetName }), el('td', { text: d.kind === 'contract' ? '계약·매출' : '미수금' }),
-              el('td', {}, sel), el('td', { text: d.asOf || '-' }), el('td', { class: 'num', text: fmt(d.rows.length) }), el('td', { class: 'num', text: d.noId ? fmt(d.noId) : '-' }));
+              el('td', {}, sel), el('td', { text: d.monthNote ? `${d.asOf} · ${d.monthNote}` : d.asOf || '-' }), el('td', { class: 'num', text: fmt(d.rows.length) }), el('td', { class: 'num', text: d.noId ? fmt(d.noId) : '-' }));
           }))))));
     }
 
