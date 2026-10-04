@@ -8,6 +8,8 @@ export interface StoredFile {
 
 export interface StorageService {
   save(file: Express.Multer.File): Promise<StoredFile>;
+  // 저장된 파일명(UUID.확장자)의 실제 경로 — 서명 검증을 통과한 다운로드에서만 쓴다.
+  filePath(fileName: string): string;
 }
 
 export const STORAGE_SERVICE = 'STORAGE_SERVICE';

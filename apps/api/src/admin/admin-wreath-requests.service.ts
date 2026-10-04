@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WreathRequestsService } from '../wreath-requests/wreath-requests.service';
+import { FileUrlService } from '../storage/file-url.service';
 import { InvalidStatusTransitionException, NotFoundApiException } from '../common/exceptions/api.exception';
 import { statusLabel } from '../common/status-label';
 import { ListAdminWreathRequestsQueryDto } from './dto/list-admin-wreath-requests.dto';
@@ -14,6 +15,7 @@ export class AdminWreathRequestsService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly wreathRequestsService: WreathRequestsService,
+    private readonly fileUrls: FileUrlService,
   ) {}
 
   // GET /api/admin/wreath-requests — filterable per the doc 03 section 2-4 wireframe.
@@ -92,7 +94,7 @@ export class AdminWreathRequestsService {
       ...detail,
       requesterName: request.requester.name,
       department: request.requester.department,
-      attachmentUrl: request.attachment?.fileUrl ?? null,
+      attachmentUrl: this.fileUrls.sign(request.attachment?.fileUrl),
       attachmentFileName: request.attachment?.fileName ?? null,
       orderTransmissions: transmissions.map((t) => ({
         id: t.id,

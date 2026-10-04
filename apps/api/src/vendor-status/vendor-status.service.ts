@@ -3,6 +3,7 @@ import { RequestStatus } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service.interface';
+import { FileUrlService } from '../storage/file-url.service';
 import { InvalidStatusTransitionException, NotFoundApiException } from '../common/exceptions/api.exception';
 
 type NextAction = 'accept' | 'complete' | null;
@@ -15,6 +16,7 @@ export class VendorStatusService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
+    private readonly fileUrls: FileUrlService,
   ) {}
 
   async getStatus(token: string) {
@@ -32,7 +34,7 @@ export class VendorStatusService {
       status: request.status,
       nextAction: this.nextActionFor(request.status),
       invitationUrl: request.invitationUrl,
-      invitationPhotoUrls: invitationPhotos.map((p) => p.fileUrl),
+      invitationPhotoUrls: invitationPhotos.map((p) => this.fileUrls.sign(p.fileUrl)!),
     };
   }
 

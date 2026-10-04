@@ -3,9 +3,8 @@ import { getToken } from "./auth";
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api";
 
-// File URLs (attachments, completion photos) come back as paths relative to
-// the API's origin (e.g. "/uploads/xxx.png"), served outside the "/api"
-// prefix — resolve them against the API origin, not the frontend's own.
+// 파일 주소는 API가 권한을 확인한 뒤 내려주는 서명 주소("/api/files/<파일>?exp=&sig=")라
+// API 서버 기준 경로다 — 프론트엔드 origin이 아니라 API origin에 붙여야 한다.
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 
 export function resolveFileUrl(path?: string | null): string | null {

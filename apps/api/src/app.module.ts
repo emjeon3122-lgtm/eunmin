@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { resolve } from 'path';
-import configuration, { AppConfig } from './config/configuration';
+import { ConfigModule } from '@nestjs/config';
+import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './health/health.controller';
 import { AuthModule } from './auth/auth.module';
@@ -24,22 +22,6 @@ import { InvitationParserModule } from './invitation-parser/invitation-parser.mo
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
-    ServeStaticModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => [
-        {
-          rootPath: resolve(config.get<AppConfig['storageLocalDir']>('app.storageLocalDir')!),
-          serveRoot: '/uploads',
-          // 업로드 파일을 확장자에 맞는 타입으로만 해석하게 해 브라우저의 내용 추측 실행을 막는다.
-          serveStaticOptions: {
-            setHeaders: (res: { setHeader: (name: string, value: string) => void }) => {
-              res.setHeader('X-Content-Type-Options', 'nosniff');
-            },
-          },
-        },
-      ],
-    }),
     PrismaModule,
     AuthModule,
     UsersModule,

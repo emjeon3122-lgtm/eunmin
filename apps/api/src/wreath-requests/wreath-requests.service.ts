@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendToVendorService } from '../jobs/send-to-vendor.service';
+import { FileUrlService } from '../storage/file-url.service';
 import {
   InvalidStatusTransitionException,
   NotFoundApiException,
@@ -21,6 +22,7 @@ export class WreathRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sendToVendorService: SendToVendorService,
+    private readonly fileUrls: FileUrlService,
   ) {}
 
   // docs/02-api-spec.md section 3-1 + docs/04 section 3.
@@ -222,8 +224,8 @@ export class WreathRequestsService {
         : null,
       acceptedAt: request.acceptedAt,
       completedAt: request.completedAt,
-      completionPhotoUrls: completionPhotos.map((p) => p.fileUrl),
-      invitationPhotoUrls: invitationPhotos.map((p) => p.fileUrl),
+      completionPhotoUrls: completionPhotos.map((p) => this.fileUrls.sign(p.fileUrl)!),
+      invitationPhotoUrls: invitationPhotos.map((p) => this.fileUrls.sign(p.fileUrl)!),
       adminOverrideNote: request.adminOverrideNote,
       cancelledReason: request.cancelledReason,
       cancelledAt: request.cancelledAt,

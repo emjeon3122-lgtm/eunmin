@@ -12,7 +12,7 @@
 
 | 컨테이너 | 역할 | 포트 | 외부 노출 |
 |---|---|---|---|
-| `web` | 화면(Next.js). `/api`, `/uploads` 요청은 내부에서 `api`로 전달 | 3000 (0.0.0.0) | Tunnel 대상 `http://web:3000` |
+| `web` | 화면(Next.js). `/api` 요청은 내부에서 `api`로 전달 | 3000 (0.0.0.0) | Tunnel 대상 `http://web:3000` |
 | `api` | 서버(NestJS), DB, 파일 저장 | 4000 | 없음 |
 | `cloudflared` | Cloudflare Tunnel | - | - |
 

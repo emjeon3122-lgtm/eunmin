@@ -36,4 +36,8 @@ export class LocalStorageService implements StorageService {
     await writeFile(join(this.dir, filename), file.buffer);
     return { fileUrl: `/uploads/${filename}` };
   }
+
+  filePath(fileName: string): string {
+    return join(this.dir, fileName);
+  }
 }

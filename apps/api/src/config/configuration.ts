@@ -29,6 +29,8 @@ export interface AppConfig {
   };
   storageDriver: 'local';
   storageLocalDir: string;
+  // 업로드 파일 서명 주소의 유효 시간(초). 화면을 열어둔 채 이보다 오래 지나면 새로고침 필요.
+  fileUrlTtlSeconds: number;
   // 청첩장/부고장 자동 채우기 — 'mock'이면 외부로 아무것도 보내지 않고 빈 결과를
   // 반환한다(기본값). 'claude'로 바꾸면 Claude 비전 모델로 실제 추출을 수행한다.
   invitationParser: 'mock' | 'claude';
@@ -72,6 +74,7 @@ export default (): { app: AppConfig } => {
       },
       storageDriver: (process.env.STORAGE_DRIVER as 'local') ?? 'local',
       storageLocalDir: process.env.STORAGE_LOCAL_DIR ?? './uploads',
+      fileUrlTtlSeconds: parseInt(process.env.FILE_URL_TTL_SECONDS ?? '43200', 10),
       invitationParser: (process.env.INVITATION_PARSER as 'mock' | 'claude') ?? 'mock',
       anthropic: {
         apiKey: process.env.ANTHROPIC_API_KEY ?? '',
