@@ -779,6 +779,9 @@
     const unlocked = meta.filter((x) => !x.locked && x.contract).map((x) => x.month);
     const upto = el('select', { 'aria-label': '확정할 마지막 월' }, unlocked.map((m) => el('option', { value: m, selected: m === unlocked[unlocked.length - 1], text: monthLabel(m) })));
     box.append(el('section', { class: 'block' }, el('h3', { text: '월별 자료 (회사 서버에 저장됨)' }),
+      el('p', { class: 'muted', text: state.cfg?.autoLockDay
+        ? `자동 확정: 매월 ${state.cfg.autoLockDay}일(서버 시각)이 되면 지난달까지 확정되지 않은 달을 확정합니다. 직접 '확정 풀기'한 달은 자동으로 다시 확정하지 않습니다.`
+        : "자동 확정: 꺼짐 — 입력용 '설정' 시트의 '자동 확정일'에 날짜(1~28)를 적어 올리면 켜집니다." }),
       el('p', { class: 'muted', text: state.inputMeta ? `입력용: ${state.inputMeta.fileName} (${new Date(state.inputMeta.updatedAt).toLocaleString('ko-KR')}, ${state.inputMeta.by})` : '입력용 자료가 아직 없습니다.' }),
       el('div', { class: 'toolbar' },
         el('span', { text: '확정할 마지막 월' }), upto,
@@ -789,13 +792,13 @@
       el('div', { class: 'table-wrap' }, el('table', {},
         el('thead', {}, el('tr', {}, ['월', '상태', '보고 당시 매핑', '계약·매출 파일', '건수', '미수금 파일', '마지막 변경', '관리'].map((h) => el('th', { text: h })))),
         el('tbody', {}, meta.map((x) => el('tr', {},
-          el('td', { text: monthLabel(x.month) }), el('td', { text: x.locked ? '🔒 확정' : '작업 중' }),
+          el('td', { text: monthLabel(x.month) }), el('td', { text: x.locked ? '🔒 확정' : x.autoLockHold ? '작업 중 (자동 확정 제외)' : '작업 중' }),
           el('td', { text: x.mappingAt ? `저장됨 (${new Date(x.mappingAt).toLocaleDateString('ko-KR')})` : x.locked ? '없음 — 확정 풀고 다시 확정하면 저장' : '-' }),
           el('td', { text: x.contract ? `${x.contract.fileName} › ${x.contract.sheetName}` : '-' }), el('td', { class: 'num', text: x.contract ? fmt(x.contract.rows) : '-' }),
           el('td', { text: x.ar ? x.ar.fileName : '-' }),
           el('td', { text: x.updatedAt ? `${new Date(x.updatedAt).toLocaleString('ko-KR')} ${x.by || ''}` : '-' }),
           el('td', {}, x.locked
-            ? el('button', { class: 'btn', text: '확정 풀기', onclick: () => adminAction('/api/admin/unlock', { month: x.month }, `${monthLabel(x.month)} 확정을 풀까요? 풀면 같은 달 파일을 올릴 때 덮어쓰게 됩니다.`) })
+            ? el('button', { class: 'btn', text: '확정 풀기', onclick: () => adminAction('/api/admin/unlock', { month: x.month }, `${monthLabel(x.month)} 확정을 풀까요? 풀면 같은 달 파일을 올릴 때 덮어쓰게 됩니다. 이 달은 고친 뒤 직접 다시 확정해야 합니다(자동 확정 제외).`) })
             : el('button', { class: 'btn', text: '삭제', onclick: () => adminAction('/api/admin/delete', { month: x.month }, `${monthLabel(x.month)} 자료를 서버에서 지울까요?`) }))))))),
       el('p', { class: 'muted', text: "기준월은 ERP 등록일자 중 가장 늦은 날짜로 자동 판단합니다. 잘못 들어간 달은 '삭제' 후 다시 올리세요. 서버는 매일 자동 백업을 만들고, '백업 파일 받기'로 지금 상태를 내려받을 수 있습니다. 백업 파일을 '자료 올리기'로 올리면 월별 자료·확정 상태·입력용 설정이 그대로 복구됩니다. 백업 파일에는 실적 전체가 들어 있으니 안전한 곳에 보관하세요." })));
   }

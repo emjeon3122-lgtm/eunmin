@@ -68,6 +68,14 @@ wb.save(${JSON.stringify(changed)})`]);
   const d25 = out.datasets.find((d) => d.month === '2025-04' && d.kind === 'contract');
   assert.ok(d25.rows.length > 0 && d25.mapping.bu.every(([, bu]) => bu === '6팀'));
   console.log('6팀 권한자 25.04 행', d25.rows.length, '건, 매핑은 6팀 것만');
+  // 직접 확정을 푼 달은 자동 확정 제외로 표시되고, 직접 다시 확정하면 해제된다.
+  await api('/api/admin/unlock', { month: '2025-04' });
+  const meta2 = await p.evaluate(() => fetch('/api/data').then((r) => r.json()).then((d) => d.months.find((x) => x.month === '2025-04')));
+  assert.ok(!meta2.locked && meta2.autoLockHold, '확정 풀기 → 자동 확정 제외');
+  await api('/api/admin/lock', { upto: '2025-04' });
+  const meta3 = await p.evaluate(() => fetch('/api/data').then((r) => r.json()).then((d) => d.months.find((x) => x.month === '2025-04')));
+  assert.ok(meta3.locked && !meta3.autoLockHold && meta3.mappingAt, '직접 확정 → 제외 해제·매핑 다시 저장');
+  console.log('확정 풀기/다시 확정: 자동 확정 제외 표시 동작');
   assert.deepEqual(errs, []);
   await b.close(); srv.kill(); fs.rmSync(dataDir, { recursive: true, force: true }); fs.rmSync(changed, { force: true }); 
   console.log('PASS');

@@ -87,7 +87,7 @@ const Model = (() => {
   async function readInput(book) {
     const t = async (name, req) => (book.sheetNames.includes(name) ? table(await book.rows(name), req) || [] : []);
     const cfg = {
-      company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, fundScope: 'everyone',
+      company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, fundScope: 'everyone', autoLockDay: null,
       buOrder: [], plans: {}, plansReported: {}, orgRules: [], catMap: new Map(),
       people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(), access: [],
       problems: [],
@@ -100,6 +100,12 @@ const Model = (() => {
       // 자금·예수금 공개 범위: '모두'(기본) 또는 '전체권한자'(전체 권한이 있는 사람만)
       else if (k.startsWith('자금')) cfg.fundScope = norm(v).includes('전체권한') ? 'all-only' : 'everyone';
       else if (k.startsWith('전년대비검토기준') && num(v) >= 0) cfg.yoyReviewMin = num(v);
+      // 서버 버전: 매월 이 날짜가 되면 지난달까지 자동 확정(1~28, 비우면 끔)
+      else if (k.startsWith('자동확정')) {
+        const d = Number(String(v ?? '').replace(/[^0-9]/g, ''));
+        if (d >= 1 && d <= 28) cfg.autoLockDay = d;
+        else if (text(v)) cfg.problems.push(`입력용 '설정' 자동 확정일은 1~28 사이 숫자로 적어 주세요(지금: ${text(v)}).`);
+      }
       else if (k === '중분류순서') cfg.catOrder = text(v).split(',').map((s) => s.trim()).filter(Boolean);
     }
     // '연도' 칸(예: FY2026)이 있으면 회계연도별 계획, 없으면 모든 연도에 같은 계획을 쓴다.

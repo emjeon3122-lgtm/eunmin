@@ -18,7 +18,7 @@ function resolveUser(email, input, { adminEmails = [], roles = [], adminRole = '
 }
 
 function filterFor(user, input, months) {
-  const monthMeta = Object.entries(months).map(([m, r]) => ({ month: m, locked: !!r.locked, mappingAt: r.mapping?.at || null, updatedAt: r.updatedAt, by: user.admin ? r.by : undefined,
+  const monthMeta = Object.entries(months).map(([m, r]) => ({ month: m, locked: !!r.locked, autoLockHold: !!r.autoLockHold, mappingAt: r.mapping?.at || null, updatedAt: r.updatedAt, by: user.admin ? r.by : undefined,
     contract: r.contract ? { fileName: r.contract.fileName, sheetName: r.contract.sheetName, rows: r.contract.rows.length } : null,
     ar: r.ar ? { fileName: r.ar.fileName, sheetName: r.ar.sheetName, rows: r.ar.rows.length } : null }));
   const all = [];

@@ -11,6 +11,7 @@ const { createStorage } = require('./lib/storage');
 const { resolveUser, filterFor } = require('./lib/access');
 const auth = require('./lib/auth');
 const { buildBackup, scheduleBackups } = require('./lib/backup');
+const { scheduleAutoLock } = require('./lib/autolock');
 const { effectiveMapping } = require('./lib/mapping');
 
 // ---- 설정 -------------------------------------------------------------------
@@ -163,7 +164,10 @@ const adminRoutes = {
     const locked = [];
     for (const [m, rec] of Object.entries(months)) {
       // 확정하는 순간의 본부·중분류 매핑을 '보고 당시 기준'으로 함께 저장한다.
-      if (m <= body.upto && rec.contract && !rec.locked) { storage.saveMonth(m, stamp({ ...rec, locked: true, mapping: effectiveMapping(input.cfg, m) }, user)); locked.push(m); }
+      if (m <= body.upto && rec.contract && !rec.locked) {
+        const { autoLockHold, ...keep } = rec; // 직접 확정하면 자동 확정 제외 표시도 지운다
+        storage.saveMonth(m, stamp({ ...keep, locked: true, mapping: effectiveMapping(input.cfg, m) }, user)); locked.push(m);
+      }
     }
     storage.audit({ by: user.email, action: 'lock', upto: body.upto, locked });
     return { locked };
@@ -171,7 +175,8 @@ const adminRoutes = {
   async unlock(body, user) {
     if (!sanitize.isMonth(body.month) || !storage.load().months[body.month]) throw Object.assign(new Error('없는 월입니다.'), { status: 404 });
     const { mapping, ...rest } = monthRecord(body.month); // 확정을 풀면 보고 당시 매핑도 지운다(다시 확정할 때 새로 저장)
-    storage.saveMonth(body.month, stamp({ ...rest, locked: false }, user));
+    // 직접 푼 달은 고치는 중일 수 있으므로 자동 확정이 다시 잠그지 않는다(관리자가 직접 확정하면 해제).
+    storage.saveMonth(body.month, stamp({ ...rest, locked: false, autoLockHold: true }, user));
     storage.audit({ by: user.email, action: 'unlock', month: body.month });
     return { ok: true };
   },
@@ -278,4 +283,5 @@ const server = http.createServer((req, res) => {
 });
 server.requestTimeout = 5 * 60 * 1000;
 scheduleBackups({ ...config.backup, dir: config.backup.dir || path.join(config.dataDir, 'backups'), load: storage.load, log: (m) => console.log(m) });
+scheduleAutoLock({ storage, log: (m) => console.log(m) });
 server.listen(config.port, config.host, () => console.log(`실적 대시보드 서버 ${VERSION}: http://${config.host}:${config.port} (로그인 방식: ${config.authMode})`));
