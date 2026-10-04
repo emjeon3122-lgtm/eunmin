@@ -1,0 +1,281 @@
+# NAS(Synology) 운영 배포 안내
+
+경조사 화환 신청 앱을 Synology NAS의 Container Manager(Docker)로 운영하기 위한 안내입니다.
+대상 장비: DS1019+ (linux/amd64), DSM 7.3, Container Manager.
+
+## 1. 구성
+
+```
+사용자/꽃집 ──HTTPS──▶ Cloudflare ──Tunnel──▶ cloudflared ──▶ web:3000 ──(내부)──▶ api:4000 ──▶ /data
+                                              └──────────── 같은 컨테이너 네트워크(wreath) ────────────┘
+```
+
+| 컨테이너 | 역할 | 포트 | 외부 노출 |
+|---|---|---|---|
+| `web` | 화면(Next.js). `/api` 요청은 내부에서 `api`로 전달 | 3000 (0.0.0.0) | Tunnel 대상 `http://web:3000` |
+| `api` | 서버(NestJS), DB, 파일 저장 | 4000 | 없음 |
+| `cloudflared` | Cloudflare Tunnel | - | - |
+
+- **NAS 호스트 포트는 하나도 열지 않습니다.** 들어오는 연결은 Tunnel뿐입니다.
+- **별도 DB 서버는 없습니다.** DB는 SQLite 파일 1개이며, 사진과 함께 `DATA_DIR` 한 폴더에 저장됩니다.
+- 컨테이너는 지정한 일반 계정(UID/GID)으로 실행되고, `DATA_DIR` 외의 NAS 폴더는 연결하지 않습니다.
+
+### 저장 데이터 (`DATA_DIR`)
+
+```
+DATA_DIR/
+├── db/wreath.db     신청서, 사용자, 알림톡 발송 기록, 알림
+└── uploads/         파트너 승인 증빙, 청첩장·부고장 사진, 배송완료 사진
+```
+
+컨테이너를 삭제하거나 새 버전으로 다시 만들어도 이 폴더는 그대로 남습니다.
+
+## 2. 사전 준비 (NAS 관리자)
+
+### 2-1. 전용 폴더와 실행 계정
+1. 앱 전용 공유폴더를 만듭니다. 예: `/volume1/wreath-app`
+2. 앱 실행 전용 계정을 만들고, **이 공유폴더에만 읽기/쓰기 권한**을 줍니다.
+3. SSH로 접속해 계정의 UID/GID를 확인합니다.
+   ```sh
+   id 계정명      # 예: uid=1030(wreath) gid=100(users)
+   ```
+4. 데이터 폴더를 만들고 소유자를 그 계정으로 지정합니다.
+   ```sh
+   sudo mkdir -p /volume1/wreath-app/data
+   sudo chown -R 1030:100 /volume1/wreath-app/data   # 위에서 확인한 UID:GID
+   ```
+
+### 2-2. Cloudflare Tunnel
+1. Cloudflare Zero Trust → Networks → Tunnels → Create a tunnel (Cloudflared 방식).
+2. 설치 화면의 토큰(`eyJ...`)만 복사해 둡니다. 설치 명령은 실행하지 않습니다(컨테이너로 실행).
+3. Public Hostname 추가:
+   - Subdomain / Domain: 사용할 주소 (예: `wreath.회사도메인`)
+   - Service: Type `HTTP`, URL `web:3000`
+
+### 2-3. 방화벽 (NAS → 외부, 나가는 연결)
+
+| 대상 | 용도 | 시점 |
+|---|---|---|
+| Cloudflare (TCP/UDP 7844, TCP 443) | Tunnel | 상시 |
+| `api.solapi.com:443` | 알림톡 발송 | 상시 |
+| `login.microsoftonline.com:443` | Microsoft 365 로그인 | 로그인 연동 후 상시 |
+| Docker Hub (`registry-1.docker.io`, `auth.docker.io`, `production.cloudflare.docker.com`) | 기본 이미지 내려받기 | 설치·업데이트 시 |
+| `registry.npmjs.org:443` | 앱 의존성 설치 | 설치·업데이트 시 |
+| `deb.debian.org:443/80` | 이미지 내부 OpenSSL 설치 | 설치·업데이트 시 |
+| `binaries.prisma.sh:443` | DB 엔진 내려받기 | 설치·업데이트 시 |
+| `api.anthropic.com:443` | 청첩장 AI 자동 채우기 | 기능을 켤 때만(기본 꺼짐) |
+| 인터넷의 모바일 청첩장 사이트(TCP 80/443) | 직원이 입력한 청첩장 링크 읽기 | 기능을 켤 때만. 앱이 내부망 주소(사설 IP·루프백 등)는 스스로 차단 |
+
+## 3. 설치
+
+SSH로 NAS에 접속해 진행합니다. 소스는 앱 폴더 안의 `app`에 두고, 데이터 폴더(`data`)와 분리합니다.
+
+### 3-1. 소스 받기 (둘 중 하나)
+
+**압축 파일로 받은 경우** — File Station으로 압축 파일을 `/volume1/wreath-app`에 올린 뒤:
+
+```sh
+cd /volume1/wreath-app
+mkdir app && cd app
+7z x ../wreath-app-*.zip      # 또는 File Station에서 app 폴더에 압축 풀기
+```
+
+**GitHub에서 받는 경우:**
+
+```sh
+cd /volume1/wreath-app
+git clone -b <배포 브랜치> <저장소 주소> app
+```
+
+### 3-2. 설정 및 실행 (공통)
+
+```sh
+cd /volume1/wreath-app/app/deploy
+
+# 1) 설정 파일 만들기
+cp .env.example .env
+vi .env          # 아래 "필수 설정" 참고
+
+# 2) 빌드 및 실행 (첫 빌드는 DS1019+ 기준 수 분~10분 정도 걸립니다)
+sudo docker compose up -d --build
+
+# 3) 상태 확인 — api, web, cloudflared 모두 Up (healthy)이면 정상
+sudo docker compose ps
+```
+
+Container Manager 화면을 쓰려면: 프로젝트 → 생성 → 경로에 `.../app/deploy` 선택 → 기존
+`docker-compose.yml` 사용. (`.env`는 위 1단계처럼 먼저 만들어 둡니다.)
+
+### 필수 설정 (`.env`)
+
+| 항목 | 내용 |
+|---|---|
+| `DATA_DIR` | 2-1에서 만든 데이터 폴더 (예: `/volume1/wreath-app/data`) |
+| `APP_UID`, `APP_GID` | 2-1에서 확인한 실행 계정 UID/GID |
+| `CLOUDFLARE_TUNNEL_TOKEN` | 2-2의 Tunnel 토큰 |
+| `APP_BASE_URL` | 실제 접속 주소 (`https://...`). 알림톡 버튼 링크에 쓰입니다 |
+| `JWT_SECRET` | 32자 이상 임의 문자열. `openssl rand -hex 32` 결과를 넣으면 됩니다 |
+
+`JWT_SECRET`이 짧거나 `APP_BASE_URL`이 https가 아니면 **api가 시작되지 않고** 로그에 이유가
+표시됩니다. 잘못된 설정으로 인터넷에 공개되는 것을 막기 위한 동작입니다.
+
+### 설치 확인
+- 브라우저에서 `https://<도메인>/api/health` → `{"data":{"status":"ok"}}`
+- `https://<도메인>/login` 화면이 열리는지 확인
+
+## 4. 업데이트
+
+**압축 파일로 받은 경우:** 새 압축 파일의 내용으로 `app` 폴더를 덮어쓰되, **`deploy/.env`는
+그대로 둡니다**(압축 파일에는 `.env`가 들어있지 않으므로 덮어써도 지워지지 않습니다). 그다음:
+
+```sh
+cd /volume1/wreath-app/app/deploy
+sudo docker compose up -d --build
+```
+
+**GitHub에서 받는 경우:**
+
+```sh
+cd /volume1/wreath-app/app
+git pull
+cd deploy
+sudo docker compose up -d --build
+```
+
+- DB 구조 변경(마이그레이션)은 api가 시작될 때 자동 적용됩니다.
+- 데이터 폴더는 그대로 유지됩니다. 업데이트 전 스냅샷을 찍어두면 되돌리기 쉽습니다.
+
+## 5. 운영
+
+| 작업 | 명령 |
+|---|---|
+| 상태 확인 | `sudo docker compose ps` |
+| 로그 보기 | `sudo docker compose logs -f api` (또는 `web`, `cloudflared`) |
+| 재시작 | `sudo docker compose restart` |
+| 중지 | `sudo docker compose down` (데이터는 유지) |
+
+- **자동 복구:** 모든 컨테이너는 `restart: unless-stopped`입니다. NAS가 재부팅되면 Docker가
+  올라오면서 자동으로 다시 시작됩니다.
+- **로그 용량:** 컨테이너마다 10MB × 3개까지만 보관합니다.
+- **시간대:** 컨테이너는 한국 시간(Asia/Seoul)으로 동작합니다.
+
+### 백업과 복구
+- `DATA_DIR` 폴더 하나만 백업하면 됩니다.
+- SQLite는 운영 중 파일을 그대로 복사하면 깨진 사본이 생길 수 있습니다.
+  **Snapshot Replication(Btrfs 스냅샷)**으로 폴더 단위 백업을 권장합니다. 일반 파일 복사
+  방식으로 백업한다면 `docker compose stop api` 후 복사하고 다시 `start` 하세요.
+- 복구: `docker compose down` → 폴더 복원 → `docker compose up -d`
+
+### Microsoft 365 로그인 켜기
+
+직원은 회사 Outlook 계정으로 로그인하고, **직원 명단(앱 DB)에 회사 이메일이 등록된 사람만**
+들어올 수 있습니다. 꽃집은 로그인하지 않습니다(주문별 링크만 사용).
+
+**1) Microsoft Entra 관리 센터에서 앱 등록** (전산 담당자)
+1. Entra ID → 앱 등록 → 새 등록
+   - 지원되는 계정 유형: **이 조직 디렉터리의 계정만**(단일 테넌트)
+   - 리디렉션 URI: 플랫폼 **웹**, `https://<도메인>/api/auth/oidc/callback`
+2. 인증서 및 암호 → 새 클라이언트 암호 발급(만료일 기록해 두기 — 만료되면 로그인이 멈춥니다)
+3. API 사용 권한: 기본 `User.Read`(로그인 확인용)만 있으면 됩니다. 메일·파일 권한은 필요 없습니다.
+
+**2) `.env` 입력** (값은 전산 담당자가 직접 입력)
+
+```sh
+AUTH_MODE=oidc
+OIDC_ISSUER=https://login.microsoftonline.com/<디렉터리(테넌트) ID>/v2.0
+OIDC_CLIENT_ID=<애플리케이션(클라이언트) ID>
+OIDC_CLIENT_SECRET=<클라이언트 암호 값>
+OIDC_REDIRECT_URI=https://<도메인>/api/auth/oidc/callback
+ALLOW_DEV_LOGIN=false
+```
+
+`sudo docker compose up -d`로 다시 시작하면 로그인 화면에 "Microsoft 365로 로그인" 버튼이
+나옵니다. 값이 하나라도 비어 있으면 api가 시작되지 않고 로그에 이유가 표시됩니다.
+
+- **직원 명단 등록이 먼저입니다.** 관리자 화면 → "직원 명단" 탭에서 "현재 명단 엑셀로 받기"로
+  양식을 내려받아 사번·이름·부서·회사 이메일·휴대폰·파트너 여부를 채워 올립니다. 미리보기에서
+  오류가 없을 때만 한 번에 반영되고, 엑셀에 없는 직원은 삭제되지 않습니다(퇴사자는 회사 계정이
+  막히면 로그인할 수 없습니다). 처음에 관리자가 아무도
+  없으면 아래 명령으로 한 명을 등록한 뒤, 그 사람이 Microsoft 365로 로그인해 명단을 올립니다.
+  ```sh
+  sudo docker compose exec api node dist/scripts/create-admin.js <사번> <이름> <부서> <회사 이메일>
+  ```
+- 처음 로그인할 때 회사 이메일로 직원 명단과 연결되고, 이후로는 Microsoft 계정 고유값으로 찾습니다.
+- 명단에 없는 계정은 "직원 명단에 등록되지 않은 계정입니다"로 거부되고 api 로그에 남습니다.
+
+### 알림톡 실제 발송으로 전환
+`.env`에 솔라피 값을 넣고 `VENDOR_ADAPTER=kakao`로 바꾼 뒤 `sudo docker compose up -d`로 다시
+시작합니다. 값은 솔라피 계정 담당자가 콘솔에서 확인해 직접 입력합니다.
+
+| 항목 | 솔라피 콘솔에서 찾을 곳 |
+|---|---|
+| `KAKAO_CPAAS_API_KEY`, `KAKAO_CPAAS_API_SECRET` | 개발/연동 → API Key 관리 (이 앱 전용 키를 새로 발급 권장) |
+| `KAKAO_CPAAS_SENDER_KEY` | 카카오톡 채널 연동 아이디(pfId) |
+| `KAKAO_CPAAS_SENDER_PHONE` | 등록한 발신번호 |
+| `KAKAO_CPAAS_TEMPLATE_ID` | 검수 완료된 알림톡 템플릿 ID |
+
+**발송 결과 받기(선택, 권장):** 꽃집에 실제로 도착했는지·실패했는지를 기록하려면 솔라피 콘솔의
+웹훅에서 "메시지 리포트" 이벤트를 아래 주소로 등록합니다.
+
+```
+https://<도메인>/api/webhooks/solapi/<KAKAO_WEBHOOK_SECRET 값>
+```
+
+- `KAKAO_WEBHOOK_SECRET`은 32자 이상 임의 문자열입니다(`openssl rand -hex 32`). 이 값이 곧
+  인증 수단이므로 주소 전체를 외부에 공유하지 마세요. 비워두면 이 경로는 닫혀 있습니다.
+- 실패가 오면 관리자에게 알림이 가고, 관리자 상세 화면의 발송 로그에 실패 사유가 남습니다.
+- 앱은 자신이 보낸 메시지 번호만 처리하고, 결과가 한 번 확정된 건은 다시 바꾸지 않습니다.
+- 등록 후 솔라피 콘솔의 "테스트 이벤트 전송"을 실행하고 `docker compose logs api`에서 수신
+  여부를 확인해 주세요(솔라피 리포트 형식이 예상과 다르면 로그에 경고가 남습니다).
+
+### 청첩장 AI 자동 채우기 켜기
+직원이 올린 청첩장·부고장 사진이나 링크를 Anthropic(Claude) API로 보내 배송 정보를 미리
+채워주는 기능입니다(유료, 사용량만큼 과금). 기본은 꺼져 있어 아무것도 외부로 나가지 않습니다.
+청첩장 내용(개인정보)이 외부로 전송되므로 사내 확인 후 켜 주세요.
+
+```sh
+INVITATION_PARSER=claude
+ANTHROPIC_API_KEY=<Anthropic 콘솔에서 발급한 키>
+```
+
+`sudo docker compose up -d`로 다시 시작하면 api 로그에 `청첩장 자동 채우기: Claude 어댑터 사용`이
+나옵니다. 키가 비어 있으면 경고 후 꺼진 상태로 동작합니다(신청 자체는 정상).
+
+- 나가는 연결: `api.anthropic.com:443`, 그리고 링크로 채울 때는 직원이 입력한 청첩장 사이트(80/443).
+- 링크를 열 때 앱이 **내부망 주소(사설 IP·루프백·NAS·Docker 망 등)는 스스로 차단**합니다.
+  차단되면 api 로그에 `차단된 청첩장 URL입니다`가 남습니다.
+
+## 6. 시험 운영 시 참고
+
+Microsoft 365 로그인을 켜기 전(또는 직원 명단 등록 전)에는 정식 로그인 수단이 없습니다.
+시험할 때만 아래처럼 개발용 사번 로그인을 켤 수 있습니다(`AUTH_MODE=mock`일 때만 동작).
+
+```sh
+# .env
+ALLOW_DEV_LOGIN=true
+
+# 시험용 샘플 계정 생성 (A0001 관리자, E1001·E1002 직원)
+sudo docker compose up -d
+sudo docker compose exec api node dist-seed/seed.js
+```
+
+> ⚠️ 개발용 로그인을 켜면 **주소를 아는 누구나 사번만으로 들어올 수 있습니다.** 시험 기간에는
+> Cloudflare Access로 도메인 전체를 회사 이메일 인증 뒤에 두는 것을 권장합니다. 시험이 끝나면
+> `ALLOW_DEV_LOGIN`을 지우고, 샘플 데이터가 들어간 DB는 지운 뒤(`data/db/wreath.db`) 다시 시작하세요.
+
+## 7. 문제 해결
+
+| 증상 | 확인할 것 |
+|---|---|
+| api가 계속 재시작 | `docker compose logs api`에서 `운영 설정 오류` 메시지 확인 → `.env` 수정 |
+| `EACCES` / `permission denied` | `DATA_DIR` 소유자가 `APP_UID:APP_GID`인지 확인 (2-1의 4번) |
+| 도메인 접속 시 502 | `web`이 healthy인지, Tunnel Service가 `web:3000`인지 확인 |
+| `cloudflared` 연결 실패 | 토큰 값, 방화벽 7844 포트 허용 여부 확인 |
+
+## 8. 아직 남은 개발 작업
+
+정식 오픈 전에 담당자가 할 일:
+- 직원 명단 엑셀 업로드(관리자 화면 "직원 명단")
+- 꽃집 정보 입력(관리자 화면 "설정" — 실제 꽃집 연락처)
+- 솔라피 값 입력 후 `VENDOR_ADAPTER=kakao` 전환, 테스트 이벤트로 결과 수신 확인
+- (사내 확인 후) Anthropic API 키 입력 후 `INVITATION_PARSER=claude` 전환 — 위 "청첩장 AI 자동 채우기 켜기"
