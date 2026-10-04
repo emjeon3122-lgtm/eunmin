@@ -3,6 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
+import { BlockedUrlError, fetchPublicText } from '../common/safe-fetch';
 import { AppConfig } from '../config/configuration';
 import { InvitationParserAdapter, ParsedInvitationFields } from './invitation-parser.interface';
 
@@ -42,6 +43,13 @@ const SYSTEM_PROMPT = [
 const IMAGE_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
 
+const PAGE_FETCH_OPTIONS = {
+  timeoutMs: 10_000,
+  maxBytes: 2 * 1024 * 1024,
+  maxRedirects: 5,
+  userAgent: 'Mozilla/5.0 (compatible; WreathApp/1.0)',
+};
+
 @Injectable()
 export class ClaudeInvitationParserAdapter implements InvitationParserAdapter {
   private readonly logger = new Logger(ClaudeInvitationParserAdapter.name);
@@ -59,6 +67,11 @@ export class ClaudeInvitationParserAdapter implements InvitationParserAdapter {
     try {
       pageText = await this.fetchPageText(url);
     } catch (err) {
+      if (err instanceof BlockedUrlError) {
+        // 회사 내부망 주소 등 서버가 열어서는 안 되는 주소 — 일반 접속 실패와 구분해 기록한다.
+        this.logger.warn(`차단된 청첩장 URL입니다 (url=${url}): ${err.message}`);
+        return {};
+      }
       // 청첩장 업체가 외부 접근을 막아두거나 화면을 JavaScript로 그리는 경우가 흔하다.
       // 이건 오류가 아니라 흔한 결과라, 빈 값을 돌려주고 사진 첨부를 유도한다.
       this.logger.warn(`청첩장 URL을 읽지 못했습니다 (url=${url}): ${String(err)}`);
@@ -126,15 +139,9 @@ export class ClaudeInvitationParserAdapter implements InvitationParserAdapter {
     }
   }
 
+  // 서버(NAS)가 직원 대신 외부 주소를 여는 자리라, 내부망으로 새지 않는 safe-fetch를 쓴다.
   private async fetchPageText(url: string): Promise<string> {
-    const response = await fetch(url, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(10_000),
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WreathApp/1.0)' },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const html = await response.text();
+    const html = await fetchPublicText(url, PAGE_FETCH_OPTIONS);
     return htmlToText(html).slice(0, 20_000);
   }
 }

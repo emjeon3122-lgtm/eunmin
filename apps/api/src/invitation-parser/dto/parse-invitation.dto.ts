@@ -2,6 +2,6 @@ import { IsOptional, IsUrl } from 'class-validator';
 
 export class ParseInvitationDto {
   @IsOptional()
-  @IsUrl({ require_tld: false })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   url?: string;
 }
