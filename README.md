@@ -101,7 +101,7 @@ SSO는 여전히 미정이라 어댑터 인터페이스를 분리해 **개발용
 ```bash
 INVITATION_PARSER="claude"      # 기본값 mock
 ANTHROPIC_API_KEY="sk-ant-..."  # 없으면 경고 후 Mock으로 동작
-ANTHROPIC_MODEL="claude-opus-5" # 기본값
+ANTHROPIC_MODEL="claude-opus-5-5" # 기본값
 ```
 
 URL로 채울 때는 서버가 직원 대신 그 주소에 접속하므로, 내부망으로 새지 않도록

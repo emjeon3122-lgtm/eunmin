@@ -78,7 +78,7 @@ export default (): { app: AppConfig } => {
       invitationParser: (process.env.INVITATION_PARSER as 'mock' | 'claude') ?? 'mock',
       anthropic: {
         apiKey: process.env.ANTHROPIC_API_KEY ?? '',
-        model: process.env.ANTHROPIC_MODEL ?? 'claude-opus-5',
+        model: process.env.ANTHROPIC_MODEL ?? 'claude-opus-5-5',
       },
     },
   };

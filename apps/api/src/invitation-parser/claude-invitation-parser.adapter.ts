@@ -112,7 +112,9 @@ export class ClaudeInvitationParserAdapter implements InvitationParserAdapter {
     try {
       const response = await this.client.messages.parse({
         model: this.model,
-        max_tokens: 2048,
+        // 이 모델은 항상 생각(thinking)을 거친 뒤 답하고, 그 분량도 max_tokens에 포함된다 —
+        // 답 자체는 짧지만 생각 몫까지 넉넉히 잡아 답이 잘리지 않게 한다.
+        max_tokens: 8192,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content }],
         output_config: { format: zodOutputFormat(InvitationSchema) },
