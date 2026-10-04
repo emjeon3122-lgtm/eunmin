@@ -9,10 +9,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 async function bootstrap() {
-  // rawBody:true populates req.rawBody for every request — used by the kakao
-  // webhook's HMAC signature verification (docs/04 section 5) without needing a
-  // dedicated raw-body middleware just for that one route.
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
   assertProductionConfig(configService.get<AppConfig>('app')!);

@@ -165,6 +165,31 @@ sudo docker compose up -d --build
   방식으로 백업한다면 `docker compose stop api` 후 복사하고 다시 `start` 하세요.
 - 복구: `docker compose down` → 폴더 복원 → `docker compose up -d`
 
+### 알림톡 실제 발송으로 전환
+`.env`에 솔라피 값을 넣고 `VENDOR_ADAPTER=kakao`로 바꾼 뒤 `sudo docker compose up -d`로 다시
+시작합니다. 값은 솔라피 계정 담당자가 콘솔에서 확인해 직접 입력합니다.
+
+| 항목 | 솔라피 콘솔에서 찾을 곳 |
+|---|---|
+| `KAKAO_CPAAS_API_KEY`, `KAKAO_CPAAS_API_SECRET` | 개발/연동 → API Key 관리 (이 앱 전용 키를 새로 발급 권장) |
+| `KAKAO_CPAAS_SENDER_KEY` | 카카오톡 채널 연동 아이디(pfId) |
+| `KAKAO_CPAAS_SENDER_PHONE` | 등록한 발신번호 |
+| `KAKAO_CPAAS_TEMPLATE_ID` | 검수 완료된 알림톡 템플릿 ID |
+
+**발송 결과 받기(선택, 권장):** 꽃집에 실제로 도착했는지·실패했는지를 기록하려면 솔라피 콘솔의
+웹훅에서 "메시지 리포트" 이벤트를 아래 주소로 등록합니다.
+
+```
+https://<도메인>/api/webhooks/solapi/<KAKAO_WEBHOOK_SECRET 값>
+```
+
+- `KAKAO_WEBHOOK_SECRET`은 32자 이상 임의 문자열입니다(`openssl rand -hex 32`). 이 값이 곧
+  인증 수단이므로 주소 전체를 외부에 공유하지 마세요. 비워두면 이 경로는 닫혀 있습니다.
+- 실패가 오면 관리자에게 알림이 가고, 관리자 상세 화면의 발송 로그에 실패 사유가 남습니다.
+- 앱은 자신이 보낸 메시지 번호만 처리하고, 결과가 한 번 확정된 건은 다시 바꾸지 않습니다.
+- 등록 후 솔라피 콘솔의 "테스트 이벤트 전송"을 실행하고 `docker compose logs api`에서 수신
+  여부를 확인해 주세요(솔라피 리포트 형식이 예상과 다르면 로그에 경고가 남습니다).
+
 ## 6. 시험 운영 시 참고
 
 Microsoft 365 로그인 연동 전에는 정식 로그인 수단이 없습니다. 시험할 때만 아래처럼 개발용
@@ -196,5 +221,3 @@ sudo docker compose exec api node dist-seed/seed.js
 
 배포 구성과 별개로, 정식 오픈 전에 아래 작업이 이어집니다.
 - Microsoft 365 로그인 (연동 값은 전산 담당자가 `.env`의 `OIDC_*`에 직접 입력)
-- 업로드 파일 접근 제어 (로그인 또는 꽃집 링크 확인 후에만 파일 제공)
-- 알림톡 중복 발송 방지, 솔라피 발송 결과 콜백 인증 정리

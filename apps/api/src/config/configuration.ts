@@ -70,7 +70,7 @@ export default (): { app: AppConfig } => {
         senderPhone: process.env.KAKAO_CPAAS_SENDER_PHONE ?? '',
         apiBaseUrl: process.env.KAKAO_CPAAS_API_BASE_URL ?? 'https://api.solapi.com',
         templateId: process.env.KAKAO_CPAAS_TEMPLATE_ID ?? '',
-        webhookSecret: process.env.KAKAO_WEBHOOK_SECRET ?? 'change-me',
+        webhookSecret: process.env.KAKAO_WEBHOOK_SECRET ?? '',
       },
       storageDriver: (process.env.STORAGE_DRIVER as 'local') ?? 'local',
       storageLocalDir: process.env.STORAGE_LOCAL_DIR ?? './uploads',

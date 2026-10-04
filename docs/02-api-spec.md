@@ -37,7 +37,7 @@
 | 관리자 | GET | `/api/admin/export` | admin | 이력/정산 데이터 **엑셀(xlsx) 추출 (필수)** |
 | 관리자 | GET/PUT | `/api/admin/vendors/{id}` | admin | 꽃집 연동 정보 조회/수정 |
 | 관리자 | GET/PUT | `/api/admin/approval-rules` | admin | 사전승인 판정 규칙(임계값) 조회/수정 |
-| 웹훅 | POST | `/api/webhooks/kakao-transmission` | 서명 검증 | 친구톡 대행사의 발송 결과 콜백 수신 |
+| 웹훅 | POST | `/api/webhooks/solapi/{비밀값}` | 주소 내 비밀값 | 솔라피 메시지 리포트(발송 결과) 수신 — 구현 기준. 아래 3-9는 설계 당시 초안 |
 
 ---
 
