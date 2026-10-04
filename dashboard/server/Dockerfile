@@ -5,7 +5,8 @@ COPY lib ./lib
 COPY public ./public
 COPY tools ./tools
 COPY server.js VERSION ./
-ENV NODE_ENV=production DATA_DIR=/data PORT=7020 HOST=127.0.0.1
+# TZ: 자동 확정일·자동 백업 시각을 판단하는 시간대(.env 의 TZ 로 바꿀 수 있음)
+ENV NODE_ENV=production DATA_DIR=/data PORT=7020 HOST=127.0.0.1 TZ=Asia/Seoul
 RUN mkdir -p /data && chown node:node /data
 USER node
 HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- "http://127.0.0.1:${PORT}/healthz" || exit 1
