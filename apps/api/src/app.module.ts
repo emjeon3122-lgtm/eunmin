@@ -4,6 +4,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { resolve } from 'path';
 import configuration, { AppConfig } from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
+import { HealthController } from './health/health.controller';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { StorageModule } from './storage/storage.module';
@@ -30,6 +31,12 @@ import { InvitationParserModule } from './invitation-parser/invitation-parser.mo
         {
           rootPath: resolve(config.get<AppConfig['storageLocalDir']>('app.storageLocalDir')!),
           serveRoot: '/uploads',
+          // 업로드 파일을 확장자에 맞는 타입으로만 해석하게 해 브라우저의 내용 추측 실행을 막는다.
+          serveStaticOptions: {
+            setHeaders: (res: { setHeader: (name: string, value: string) => void }) => {
+              res.setHeader('X-Content-Type-Options', 'nosniff');
+            },
+          },
         },
       ],
     }),
@@ -50,5 +57,6 @@ import { InvitationParserModule } from './invitation-parser/invitation-parser.mo
     WebhooksModule,
     InvitationParserModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}

@@ -22,20 +22,22 @@ const COOKIE_NAME = 'token';
 @Controller('auth')
 export class AuthController {
   private readonly authMode: AppConfig['authMode'];
+  private readonly devLoginEnabled: boolean;
+  private readonly secureCookie: boolean;
 
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {
     this.authMode = this.configService.get<AppConfig['authMode']>('app.authMode')!;
+    this.devLoginEnabled = this.configService.get<AppConfig['devLoginEnabled']>('app.devLoginEnabled')!;
+    this.secureCookie = this.configService.get<AppConfig['isProduction']>('app.isProduction')!;
   }
 
-  // Only registered behavior when AUTH_MODE=mock; real deployments should not
-  // expose an employeeNo-only login. Module-level gating is done via env check
-  // in AuthModule so this stays a no-op 404 under AUTH_MODE=oidc.
+  // 사번만으로 로그인하는 개발용 경로 — 운영에서는 ALLOW_DEV_LOGIN=true가 아니면 404.
   @Post('dev-login')
   async devLogin(@Body() dto: DevLoginDto, @Res({ passthrough: true }) res: Response) {
-    if (this.authMode !== 'mock') {
+    if (!this.devLoginEnabled) {
       throw new NotFoundException();
     }
     const { token } = await this.authService.devLogin(dto.employeeNo);
@@ -51,6 +53,9 @@ export class AuthController {
   @Post('sso/callback')
   async ssoCallback(@Body() dto: SsoCallbackDto, @Res({ passthrough: true }) res: Response) {
     if (this.authMode === 'mock') {
+      if (!this.devLoginEnabled) {
+        throw new NotFoundException();
+      }
       const { token } = await this.authService.devLogin(dto.code);
       this.setCookie(res, token);
       return { token };
@@ -71,6 +76,7 @@ export class AuthController {
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: 'lax',
+      secure: this.secureCookie,
       maxAge: 8 * 60 * 60 * 1000,
     });
   }

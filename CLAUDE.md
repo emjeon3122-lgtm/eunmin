@@ -16,6 +16,15 @@ This repo holds two unrelated things:
    implementations (`AUTH_MODE=mock`, `VENDOR_ADAPTER=mock`) since the real IdP/CPaaS aren't
    chosen yet — see the README's "아직 실제 연동이 필요한 부분" section before wiring up
    production credentials.
+
+   **Production runs in Docker on the company's Synology NAS** (DS1019+, linux/amd64) behind a
+   Cloudflare Tunnel — see [`deploy/README.md`](./deploy/README.md). `deploy/docker-compose.yml`
+   runs `api` (internal only), `web` (the tunnel's single target, `http://web:3000`; it proxies
+   `/api` and `/uploads` to `api` via `next.config.js` rewrites, fixed at build time), and
+   `cloudflared`. All persistent data (SQLite DB + uploads) lives under one mounted `DATA_DIR`.
+   With `NODE_ENV=production` the API refuses to start on a weak `JWT_SECRET` or non-https
+   `APP_BASE_URL`, and the employee-number dev login is off unless `ALLOW_DEV_LOGIN=true`.
+   Local development still needs no Docker (`run_local_test.bat` / `npm run dev`).
 2. `pet_widget.py` / `run_pet_widget.bat` — an unrelated, standalone Windows-only desktop pet
    widget (stdlib-only: `tkinter` + `ctypes.windll`) that follows the system mouse cursor around
    the screen with a borderless, click-through, always-on-top transparent window. No pip

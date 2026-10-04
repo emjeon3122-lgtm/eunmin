@@ -11,3 +11,7 @@ apps/api/generated/
 *.db
 *.db-journal
 .env.bak
+
+# Docker 운영 데이터(로컬 시험 시) / 컨테이너용 시드 빌드 산출물
+deploy/data/
+dist-seed/
