@@ -174,7 +174,7 @@ section.block h3 { font-size: 15px; margin: 0 0 8px; }
 <body>
 <div class="wrap" id="app"></div>
 <script>
-const DASHBOARD_VERSION = '2026.10.04-5';
+const DASHBOARD_VERSION = '2026.10.05';
 </script>
 <script>
 /* chart.umd.min.js */
@@ -338,6 +338,105 @@ const XlsxReader = (() => {
   }
 
   return { open };
+})();
+
+</script>
+<script>
+/* xlsx-writer.js */
+// 최소 xlsx 작성기: 외부 라이브러리 없이 서식(머리글 색, 열 너비, 숫자 형식, 틀 고정)이 있는 엑셀 파일을 만든다.
+// 압축하지 않는(stored) zip 으로 묶는다. 문자열은 모두 inlineStr 이라 수식으로 해석되지 않는다.
+const XlsxWriter = (() => {
+  const enc = new TextEncoder();
+
+  // 셀 서식 번호(cellXfs 순서와 같아야 함)
+  const S = { text: 0, head: 1, num: 2, wrap: 3, input: 4, warn: 5, note: 6 };
+  const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0;[Red]-#,##0"/></numFmts>
+<fonts count="4"><font><sz val="10"/><name val="맑은 고딕"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/></font><font><b/><sz val="10"/><color rgb="FFC00000"/><name val="맑은 고딕"/></font><font><sz val="10"/><color rgb="FF595959"/><name val="맑은 고딕"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F3864"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD9D9D9"/></left><right style="thin"><color rgb="FFD9D9D9"/></right><top style="thin"><color rgb="FFD9D9D9"/></top><bottom style="thin"><color rgb="FFD9D9D9"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="7">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+  // XML 에 쓸 수 없는 제어 문자는 지우고 특수 문자는 바꾼다.
+  const esc = (s) => String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const colName = (i) => { let s = ''; for (i += 1; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s; return s; };
+
+  // 셀: 값(문자열·숫자·null) 또는 { v, s } (s = 서식 이름)
+  function cellXml(cell, ref) {
+    const { v, s } = cell !== null && typeof cell === 'object' ? cell : { v: cell };
+    const st = S[s ?? (typeof v === 'number' ? 'num' : 'text')];
+    if (v == null || v === '') return `<c r="${ref}" s="${st}"/>`;
+    if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}" s="${st}"><v>${v}</v></c>`;
+    return `<c r="${ref}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+  }
+
+  function sheetXml({ cols = [], rows, freezeRows = 0 }) {
+    const pane = freezeRows ? `<pane ySplit="${freezeRows}" topLeftCell="A${freezeRows + 1}" activePane="bottomLeft" state="frozen"/>` : '';
+    const colsXml = cols.length ? `<cols>${cols.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+    const body = rows.map((row, r) => `<row r="${r + 1}">${row.map((c, i) => cellXml(c, `${colName(i)}${r + 1}`)).join('')}</row>`).join('');
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0">${pane}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="16.5"/>${colsXml}<sheetData>${body}</sheetData><pageMargins left="0.5" right="0.5" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>`;
+  }
+
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = (b) => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+
+  // 압축 없는 zip
+  function zip(files) {
+    const parts = []; const central = []; let offset = 0;
+    for (const [name, text] of files) {
+      const data = enc.encode(text); const nm = enc.encode(name); const crc = crc32(data);
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true); local.setUint16(4, 20, true); local.setUint16(8, 0, true);
+      local.setUint32(14, crc, true); local.setUint32(18, data.length, true); local.setUint32(22, data.length, true); local.setUint16(26, nm.length, true);
+      const cd = new DataView(new ArrayBuffer(46));
+      cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true);
+      cd.setUint32(16, crc, true); cd.setUint32(20, data.length, true); cd.setUint32(24, data.length, true); cd.setUint16(28, nm.length, true); cd.setUint32(42, offset, true);
+      parts.push(new Uint8Array(local.buffer), nm, data); central.push(new Uint8Array(cd.buffer), nm);
+      offset += 30 + nm.length + data.length;
+    }
+    const cdSize = central.reduce((s, p) => s + p.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    const all = [...parts, ...central, new Uint8Array(end.buffer)];
+    const out = new Uint8Array(all.reduce((s, p) => s + p.length, 0)); let p = 0;
+    for (const a of all) { out.set(a, p); p += a.length; }
+    return out;
+  }
+
+  // sheets: [{ name, cols: [열 너비], rows: [[셀]], freezeRows }] → xlsx 바이트
+  function build(sheets) {
+    const n = sheets.length;
+    const files = [
+      ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`],
+      ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+      ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s, i) => `<sheet name="${esc(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`],
+      ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${n + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+      ['xl/styles.xml', STYLES],
+      ...sheets.map((s, i) => [`xl/worksheets/sheet${i + 1}.xml`, sheetXml(s)]),
+    ];
+    return zip(files);
+  }
+
+  return { build };
 })();
 
 </script>
@@ -899,32 +998,50 @@ const Model = (() => {
 
     // 사유 작성용 목록: 본부 × 중분류(합계 포함) 전년 동월 대비 변화와 참고 정보.
     // 입력용 '전년대비사유' 시트에 그대로 붙여 넣을 수 있게 월·본부·중분류·사유를 앞에 둔다.
+    // 전년대비 사유는 본부 × 중분류 단위로만 적는다. 본부 합계·법인 전체의 사유는 아래 yoyReasonFor 가 모아 보여 준다.
+    const reviewCache = new Map();
     function yoyReviewList(m) {
+      if (reviewCache.has(m)) return reviewCache.get(m);
       const y = yoyDetail(m);
       if (!y.ok) return null;
       const out = [];
-      for (const b of [...buList, TOTAL]) {
-        const inB = (r) => b === TOTAL || r.본부 === b;
-        for (const c of [...cats, null]) {
-          const pick = (rows) => rows.filter((r) => inB(r) && (!c || r.중분류 === c));
+      for (const b of buList) {
+        for (const c of cats) {
+          const pick = (rows) => rows.filter((r) => r.본부 === b && r.중분류 === c);
           const cur = pick(y.cur); const prv = pick(y.prv);
           if (!cur.length && !prv.length) continue;
           const tot = (rows, f) => rows.reduce((s, r) => s + r[f], 0);
           const newOf = (rows) => rows.filter((r) => r.신규여부 === 'Y');
           const top = newOf(cur).sort((a, b2) => b2.계약 - a.계약).slice(0, 2)
-            .map((r) => `${r.no} ${r.회사명} ${Math.round(r.계약 * 10) / 10}`);
+            .map((r) => `${r.회사명} ${Math.round(r.계약)}`);
           const row = {
-            월: monthLabel(m), 본부: b, 중분류: c || '합계', 사유: yoyReason(m, b, c),
+            월: monthLabel(m), 본부: b, 중분류: c, 사유: yoyReason(m, b, c),
             전년계약: tot(prv, '계약'), 당년계약: tot(cur, '계약'), 전년매출: tot(prv, '매출'), 당년매출: tot(cur, '매출'),
             참고: `신규수임 올해 ${newOf(cur).length}건 ${Math.round(tot(newOf(cur), '계약'))} / 작년 ${newOf(prv).length}건 ${Math.round(tot(newOf(prv), '계약'))}`
-              + (top.length ? ` · 올해 큰 신규수임: ${top.join(', ')}` : ''),
+              + (top.length ? ` (큰 신규: ${top.join(', ')})` : ''),
           };
           row.계약증감 = row.당년계약 - row.전년계약; row.매출증감 = row.당년매출 - row.전년매출;
           row.검토 = needsReview(row.계약증감) || needsReview(row.매출증감);
           out.push(row);
         }
       }
-      return { prevMonth: y.prevMonth, rows: out };
+      const res = { prevMonth: y.prevMonth, rows: out };
+      reviewCache.set(m, res);
+      return res;
+    }
+
+    // 사유 표시: 직접 적은 사유가 있으면 그것, 없으면(본부 합계·법인 전체) 그 아래 본부 × 중분류 사유를
+    // 증감이 큰 순으로 모은다. → { text, auto }
+    function yoyReasonFor(m, b, cat, field = '계약') {
+      const own = yoyReason(m, b, cat);
+      if (own || (b !== TOTAL && cat)) return { text: own, auto: false };
+      const list = yoyReviewList(m);
+      if (!list) return { text: '', auto: false };
+      const key = field === '매출' ? '매출증감' : '계약증감';
+      const lines = list.rows.filter((r) => r.사유 && (b === TOTAL || r.본부 === b) && (!cat || r.중분류 === cat))
+        .sort((a, c) => Math.abs(c[key]) - Math.abs(a[key]))
+        .map((r) => `${[b === TOTAL ? r.본부 : '', cat ? '' : r.중분류].filter(Boolean).join(' · ')}: ${r.사유}`);
+      return { text: lines.join('\n'), auto: lines.length > 0 };
     }
 
     const summaryRows = [];
@@ -938,7 +1055,7 @@ const Model = (() => {
     return {
       empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
       hasBasis: snaps.size > 0 || org.hasHistory, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, needsReview, yoyReviewList, isFirst, before, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, yoyReasonFor, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
   }
@@ -1123,6 +1240,28 @@ const Store = (() => {
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  // 전년대비 사유 작성용 엑셀: 본부 × 중분류 한 줄씩. 앞 네 칸(월·본부·중분류·사유)은 입력용 '전년대비사유' 시트와 같은 순서라
+  // 머리글을 뺀 줄을 그대로 붙여 넣으면 된다(뒤의 참고 칸은 입력용에서 읽지 않음).
+  function downloadYoyReview(review, m, pm) {
+    const head = ['월', '본부', '중분류', '사유 (여기에 작성)', '사유 필요', `전년 계약 (${monthLabel(pm)})`, `올해 계약 (${monthLabel(m)})`, '계약 증감', '매출 증감', '참고 (신규수임 등)']
+      .map((v) => ({ v, s: 'head' }));
+    const rows = review.rows.map((r) => [r.월, r.본부, r.중분류, { v: r.사유, s: 'input' }, { v: r.검토 && !r.사유 ? '⚠' : '', s: 'warn' },
+      Math.round(r.전년계약), Math.round(r.당년계약), Math.round(r.계약증감), Math.round(r.매출증감), { v: r.참고, s: 'wrap' }]);
+    const guide = [
+      [{ v: '전년대비 사유 작성 방법', s: 'head' }],
+      [{ v: `1. '사유 작성' 시트에서 '사유 필요'에 ⚠ 표시된 줄의 노란 칸을 채웁니다. (증감이 ${fmt(state.cfg.yoyReviewMin)}백만원 이상인데 사유가 없는 줄) 다른 줄도 필요하면 적어도 됩니다.`, s: 'note' }],
+      [{ v: '2. 사유를 적은 줄을 고릅니다. 머리글(1행)은 빼고, A열(월)부터 끝까지 줄 전체를 복사합니다.', s: 'note' }],
+      [{ v: "3. 입력용.xlsx의 '전년대비사유' 시트 맨 아래 빈 줄에 붙여 넣습니다. 같은 월·본부·중분류가 이미 있으면 아래에 붙인 줄이 쓰입니다.", s: 'note' }],
+      [{ v: '4. 입력용을 다시 올리면 대시보드에 사유가 나타납니다. 본부 합계와 전체의 사유는 본부·중분류 사유를 모아 자동으로 보여 줍니다.', s: 'note' }],
+      [{ v: '금액 단위: 백만원. 참고 칸은 입력용에서 읽지 않으므로 함께 붙여 넣어도 됩니다.', s: 'note' }],
+    ];
+    const bytes = XlsxWriter.build([
+      { name: '사유 작성', cols: [9, 10, 10, 50, 8, 14, 14, 12, 12, 60], rows: [head, ...rows], freezeRows: 1 },
+      { name: '작성 방법', cols: [110], rows: guide },
+    ]);
+    download(`전년대비사유_작성용_${monthLabel(m)}.xlsx`, bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  }
+
   // 엑셀 수식 주입 방지: =, +, -, @ 로 시작하는 문자열 앞에 ' 를 붙인다.
   function toCsv(header, rows) {
     const cell = (v) => {
@@ -1717,35 +1856,34 @@ const Store = (() => {
     const prvRows = y.ok ? y.prv.filter(inBu) : [];
     const pyCat = y.ok ? res.sumByCat(prvRows, F) : null;
     const pyOf = (c) => (!pyCat ? null : c ? pyCat[c] : Object.values(pyCat).reduce((s, v) => s + v, 0));
+    const review = y.ok ? res.yoyReviewList(m) : null;
+    // 사유를 적어야 하는데 비어 있는 본부 × 중분류 수(본부 합계·전체 행은 그 아래 항목을 센다)
+    const missing = (b, c) => (review ? review.rows.filter((r) => r.검토 && !r.사유 && (b === TOTAL || r.본부 === b) && (!c || r.중분류 === c)).length : 0);
+    const reasonCell = (c) => {
+      const why = res.yoyReasonFor(m, state.sel.bu, c, F);
+      const n = missing(state.sel.bu, c);
+      const need = n ? el('span', { class: 'need', text: state.sel.bu !== TOTAL && c ? '⚠ 사유 필요' : `⚠ 아래 항목 사유 필요 ${n}건` }) : null;
+      return el('td', { class: 'wrap-text', style: 'white-space:pre-wrap' }, ...[why.text, why.text && need ? '\n' : '', need].filter(Boolean));
+    };
     const catRow = (c) => {
       const now = valOf(cur, F, c); const py = pyOf(c);
       return el('tr', { class: !c ? 'total' : cat === c ? 'selected' : '', style: 'cursor:pointer', onclick: () => (c ? setCat(c) : (state.sel.cat = null, render())) },
         el('td', { text: c || '합계' }), el('td', { class: 'num', text: fmt(now) }),
         el('td', { class: 'num', text: fmt(py) }), el('td', { class: 'num' }, delta(now != null && py != null ? now - py : null)),
         el('td', { class: 'num', text: pctSigned(rate(now, py)) }),
-        el('td', { class: 'wrap-text' }, (() => {
-          const why = res.yoyReason(m, state.sel.bu, c);
-          if (why) return why;
-          return now != null && py != null && res.needsReview(now - py) ? el('span', { class: 'need', text: '⚠ 사유 필요' }) : '';
-        })()));
+        reasonCell(c));
     };
     box.append(el('section', { class: 'block' },
       el('h3', { text: `중분류별 전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
       simpleTable(['중분류', `당월 ${F}`, `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
     if (y.ok) {
-      const review = res.yoyReviewList(m);
-      const need = review.rows.filter((r) => r.검토 && !r.사유).length;
+      const need = missing(TOTAL, null);
       box.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },
         el('div', { class: 'k', text: '전년대비 사유 작성' }),
         el('div', { class: 'toolbar', style: 'margin:4px 0' },
-          el('button', { class: 'btn primary', text: '사유 작성용 목록 다운로드 (CSV)', onclick: () => download(`전년대비사유_작성용_${monthLabel(m)}.csv`,
-            toCsv(['월', '본부', '중분류', '사유', '검토 필요', '전년 계약', '당년 계약', '계약 증감', '계약 증감률', '전년 매출', '당년 매출', '매출 증감', '매출 증감률', '참고'],
-              [...review.rows].sort((a, b) => (b.검토 - a.검토) || Math.abs(b.계약증감) - Math.abs(a.계약증감)).map((r) => [
-                r.월, r.본부, r.중분류, r.사유, r.검토 ? 'Y' : '',
-                r.전년계약, r.당년계약, r.계약증감, pctSigned(rate(r.당년계약, r.전년계약)),
-                r.전년매출, r.당년매출, r.매출증감, pctSigned(rate(r.당년매출, r.전년매출)), r.참고]))) }),
-          el('span', { class: 'muted', text: `본부·중분류 ${review.rows.length}개 중 증감 ${fmt(state.cfg.yoyReviewMin)} 이상인데 사유가 없는 항목 ${need}개` })),
-        el('div', { class: 'muted', text: "① 목록을 받아 엑셀에서 '사유' 칸만 채우고 ② 전체를 복사해 입력용.xlsx '전년대비사유' 시트에 붙여 넣은 뒤 ③ 입력용 파일을 다시 올리면 사유가 표시됩니다. 나머지 참고 칸은 붙여 넣어도 무시됩니다. 검토 기준 금액은 '설정' 시트의 '전년대비 검토기준(백만원)'으로 바꿀 수 있습니다." })));
+          el('button', { class: 'btn primary', text: '사유 작성용 엑셀 받기', onclick: () => downloadYoyReview(review, m, pm) }),
+          el('span', { class: 'muted', text: need ? `사유가 필요한 본부·중분류 ${need}개 (증감 ${fmt(state.cfg.yoyReviewMin)} 이상)` : '사유가 필요한 항목이 모두 채워졌습니다.' })),
+        el('div', { class: 'muted', text: "사유는 본부 × 중분류별로만 적으면 됩니다. 본부 합계와 전체의 사유는 자동으로 모아서 보여 줍니다. 받은 엑셀의 노란 '사유' 칸을 채운 뒤, 머리글을 뺀 줄들을 입력용.xlsx '전년대비사유' 시트 맨 아래에 붙여 넣고 입력용을 다시 올리세요." })));
       const gap = pyOf(null) - (cur[pyKey] ?? pyOf(null));
       if (Math.abs(gap) >= 0.5) box.append(el('div', { class: 'warnings', text: `작년 ${monthLabel(pm)} 원본 합계(${fmt(pyOf(null))})와 입력용 '전년실적'(${fmt(cur[pyKey])})이 ${fmt(gap)}만큼 다릅니다. 중분류별 전년 값은 원본 기준이라 조직개편 조정이나 원본에 없는 수기분이 빠져 있을 수 있습니다.` }));
     } else box.append(el('p', { class: 'muted', text: y.why }));
@@ -1753,11 +1891,14 @@ const Store = (() => {
     // 선택한 중분류의 변동 내역
     const label = `${state.sel.bu}${cat ? ' · ' + cat : ''}`;
     const drill = el('section', { class: 'block' }, el('h3', { text: `${label} — 무엇 때문에 달라졌나` }));
-    const reason = res.yoyReason(m, state.sel.bu, cat);
+    const reason = res.yoyReasonFor(m, state.sel.bu, cat, F);
+    const detail = state.sel.bu !== TOTAL && cat;
     drill.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },
-      el('div', { class: 'k', text: '전년대비 사유' }),
-      reason ? el('div', { style: 'white-space:pre-wrap;font-size:15px', text: reason })
-        : el('div', { class: 'muted', text: `입력용.xlsx '전년대비사유' 시트에 월(${monthLabel(m)})·본부(${state.sel.bu})·중분류(${cat || '비움'})·사유를 적으면 여기에 표시됩니다.` })));
+      el('div', { class: 'k', text: reason.auto ? '전년대비 사유 (본부·중분류별 사유 모음, 증감 큰 순)' : '전년대비 사유' }),
+      reason.text ? el('div', { style: 'white-space:pre-wrap;font-size:15px', text: reason.text })
+        : el('div', { class: 'muted', text: detail
+          ? `'사유 작성용 엑셀'에서 ${state.sel.bu} · ${cat} 줄의 사유를 채워 입력용에 붙여 넣으면 여기에 표시됩니다.`
+          : '아래 본부·중분류에 적은 사유가 여기에 모여서 표시됩니다.' })));
 
     // 전년 대비 구성과 주요 계약
     if (y.ok) {

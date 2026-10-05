@@ -12,6 +12,7 @@ SCRIPTS = [
     ROOT / 'vendor' / 'chart.umd.min.js',
     ROOT / 'vendor' / 'chartjs-plugin-datalabels.min.js',
     ROOT / 'src' / 'xlsx-reader.js',
+    ROOT / 'src' / 'xlsx-writer.js',
     ROOT / 'src' / 'org.js',
     ROOT / 'src' / 'model.js',
     ROOT / 'src' / 'store.js',

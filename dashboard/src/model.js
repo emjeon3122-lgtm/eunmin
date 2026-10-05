@@ -501,32 +501,50 @@ const Model = (() => {
 
     // 사유 작성용 목록: 본부 × 중분류(합계 포함) 전년 동월 대비 변화와 참고 정보.
     // 입력용 '전년대비사유' 시트에 그대로 붙여 넣을 수 있게 월·본부·중분류·사유를 앞에 둔다.
+    // 전년대비 사유는 본부 × 중분류 단위로만 적는다. 본부 합계·법인 전체의 사유는 아래 yoyReasonFor 가 모아 보여 준다.
+    const reviewCache = new Map();
     function yoyReviewList(m) {
+      if (reviewCache.has(m)) return reviewCache.get(m);
       const y = yoyDetail(m);
       if (!y.ok) return null;
       const out = [];
-      for (const b of [...buList, TOTAL]) {
-        const inB = (r) => b === TOTAL || r.본부 === b;
-        for (const c of [...cats, null]) {
-          const pick = (rows) => rows.filter((r) => inB(r) && (!c || r.중분류 === c));
+      for (const b of buList) {
+        for (const c of cats) {
+          const pick = (rows) => rows.filter((r) => r.본부 === b && r.중분류 === c);
           const cur = pick(y.cur); const prv = pick(y.prv);
           if (!cur.length && !prv.length) continue;
           const tot = (rows, f) => rows.reduce((s, r) => s + r[f], 0);
           const newOf = (rows) => rows.filter((r) => r.신규여부 === 'Y');
           const top = newOf(cur).sort((a, b2) => b2.계약 - a.계약).slice(0, 2)
-            .map((r) => `${r.no} ${r.회사명} ${Math.round(r.계약 * 10) / 10}`);
+            .map((r) => `${r.회사명} ${Math.round(r.계약)}`);
           const row = {
-            월: monthLabel(m), 본부: b, 중분류: c || '합계', 사유: yoyReason(m, b, c),
+            월: monthLabel(m), 본부: b, 중분류: c, 사유: yoyReason(m, b, c),
             전년계약: tot(prv, '계약'), 당년계약: tot(cur, '계약'), 전년매출: tot(prv, '매출'), 당년매출: tot(cur, '매출'),
             참고: `신규수임 올해 ${newOf(cur).length}건 ${Math.round(tot(newOf(cur), '계약'))} / 작년 ${newOf(prv).length}건 ${Math.round(tot(newOf(prv), '계약'))}`
-              + (top.length ? ` · 올해 큰 신규수임: ${top.join(', ')}` : ''),
+              + (top.length ? ` (큰 신규: ${top.join(', ')})` : ''),
           };
           row.계약증감 = row.당년계약 - row.전년계약; row.매출증감 = row.당년매출 - row.전년매출;
           row.검토 = needsReview(row.계약증감) || needsReview(row.매출증감);
           out.push(row);
         }
       }
-      return { prevMonth: y.prevMonth, rows: out };
+      const res = { prevMonth: y.prevMonth, rows: out };
+      reviewCache.set(m, res);
+      return res;
+    }
+
+    // 사유 표시: 직접 적은 사유가 있으면 그것, 없으면(본부 합계·법인 전체) 그 아래 본부 × 중분류 사유를
+    // 증감이 큰 순으로 모은다. → { text, auto }
+    function yoyReasonFor(m, b, cat, field = '계약') {
+      const own = yoyReason(m, b, cat);
+      if (own || (b !== TOTAL && cat)) return { text: own, auto: false };
+      const list = yoyReviewList(m);
+      if (!list) return { text: '', auto: false };
+      const key = field === '매출' ? '매출증감' : '계약증감';
+      const lines = list.rows.filter((r) => r.사유 && (b === TOTAL || r.본부 === b) && (!cat || r.중분류 === cat))
+        .sort((a, c) => Math.abs(c[key]) - Math.abs(a[key]))
+        .map((r) => `${[b === TOTAL ? r.본부 : '', cat ? '' : r.중분류].filter(Boolean).join(' · ')}: ${r.사유}`);
+      return { text: lines.join('\n'), auto: lines.length > 0 };
     }
 
     const summaryRows = [];
@@ -540,7 +558,7 @@ const Model = (() => {
     return {
       empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
       hasBasis: snaps.size > 0 || org.hasHistory, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, needsReview, yoyReviewList, isFirst, before, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, yoyReasonFor, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
   }
