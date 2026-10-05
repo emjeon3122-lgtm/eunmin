@@ -3,7 +3,6 @@
 'use strict';
 const Org = require('./org');
 
-const norm = (s) => (s == null ? '' : String(s)).replace(/\s+/g, '');
 const TOTAL = '전체';
 
 // 관리자: 환경변수 ADMIN_EMAILS, 또는 Entra 앱 역할(OIDC_ADMIN_ROLE, 예: Admin)을 받은 계정.
@@ -26,29 +25,25 @@ function filterFor(user, input, months) {
     if (r.contract) all.push({ ...r.contract, kind: 'contract', month: m, locked: !!r.locked, ...(r.mapping ? { mapping: r.mapping } : {}) });
     if (r.ar) all.push({ ...r.ar, kind: 'ar', month: m, locked: !!r.locked });
   }
-  if (!input) return { cfg: null, datasets: user.all ? all : [], months: monthMeta };
+  // '보고 당시 기준'은 관리자만 본다. 그 밖의 사람에게는 확정 때 저장한 매핑과 보고 당시 계획을 보내지 않는다.
+  const noSnap = (list) => list.map(({ mapping, ...d }) => d);
+  if (!input) return { cfg: null, datasets: user.all ? (user.admin ? all : noSnap(all)) : [], months: monthMeta };
   const cfg = input.cfg;
   if (user.all) {
-    const out = { ...cfg };
-    if (!user.admin) delete out.access;
-    return { cfg: out, datasets: all, months: monthMeta };
+    if (user.admin) return { cfg, datasets: all, months: monthMeta };
+    const { access, plansReported, ...out } = cfg;
+    return { cfg: { ...out, plansReported: {} }, datasets: noSnap(all), months: monthMeta };
   }
 
+  // 본부 권한자(관리자가 아님)는 현재 조직 기준으로 자기 본부인 행만 받는다.
   const allowed = new Set(user.bus);
   // 본부 판별은 화면 계산과 같은 코드(lib/org.js = src/org.js 사본)를 쓴다.
   const org = Org.compile(cfg.orgRules);
-  // 보고 당시 매핑으로 그 본부였던 행도 함께 보낸다(보고 당시 기준 화면용).
-  const snap = new Map(Object.entries(months).filter(([, r]) => r.mapping).map(([m, r]) => [m, new Map(r.mapping.bu)]));
-  const inScope = (m) => (r) => {
-    const mm = m || r.month;
-    // 현재 조직 기준, 보고 당시 기준, 확정 때 저장한 매핑 중 하나라도 이 사람의 본부면 보낸다.
-    return allowed.has(org.current(r.사업부, mm)) || allowed.has(org.reported(r.사업부, mm)) || allowed.has(snap.get(mm)?.get(norm(r.사업부)));
-  };
+  const inScope = (m) => (r) => allowed.has(org.current(r.사업부, m || r.month));
   const pickBus = (o) => Object.fromEntries(Object.entries(o || {}).filter(([bu]) => allowed.has(bu)));
   const byMonth = (o) => Object.fromEntries(Object.entries(o || {}).map(([m, v]) => [m, pickBus(v)]));
 
-  const datasets = all.map((d) => ({ ...d, rows: d.rows.filter(inScope(d.month)), ...(d.manual ? { manual: d.manual.filter(inScope(d.month)) } : {}),
-    ...(d.mapping ? { mapping: { ...d.mapping, bu: d.mapping.bu.filter(([, bu]) => allowed.has(bu)) } } : {}) }));
+  const datasets = noSnap(all).map((d) => ({ ...d, rows: d.rows.filter(inScope(d.month)), ...(d.manual ? { manual: d.manual.filter(inScope(d.month)) } : {}) }));
   const visibleNos = new Set();
   datasets.forEach((d) => { if (d.kind === 'contract') d.rows.forEach((r) => visibleNos.add(r.no)); });
   const out = {
@@ -57,7 +52,7 @@ function filterFor(user, input, months) {
     plans: Object.fromEntries(Object.entries(cfg.plans).map(([fy, v]) => [fy, pickBus(v)])),
     // 관련된 사업부는 이력 전체를 보낸다(최근 줄이 있어야 현재 조직 기준 계산이 맞다).
     orgRules: (() => { const keep = new Set(cfg.orgRules.filter(([, , bu, cur]) => allowed.has(bu) || allowed.has(cur)).map(([s]) => s)); return cfg.orgRules.filter(([s]) => keep.has(s)); })(),
-    plansReported: Object.fromEntries(Object.entries(cfg.plansReported || {}).map(([fy, v]) => [fy, pickBus(v)])),
+    plansReported: {},
     people: byMonth(cfg.people), prev: byMonth(cfg.prev), arManual: byMonth(cfg.arManual),
     // 자금·예수금은 법인 전체 값이다. 입력용 '설정'에서 '전체권한자'로 정하면 전체 권한자에게만 보낸다.
     fund: cfg.fundScope === 'all-only' ? {} : cfg.fund, fundScope: cfg.fundScope,

@@ -135,8 +135,11 @@ function startIdp(port, clientId) {
       ok += compare(await metricsOf(p, expected), expected, 'oidc-admin'); console.log('재시작·SSO 관리자 숫자 일치');
     } else {
       const org = require('../lib/org').compile(data.cfg.orgRules);
-      const bad = data.datasets.flatMap((d) => d.rows.map((r) => ({ ...r, month: d.month }))).filter((r) => org.current(r.사업부, r.month) !== bu && org.reported(r.사업부, r.month) !== bu);
-      assert.equal(bad.length, 0, '권한 밖 행이 내려오지 않아야 함');
+      const bad = data.datasets.flatMap((d) => d.rows.map((r) => ({ ...r, month: d.month }))).filter((r) => org.current(r.사업부, r.month) !== bu);
+      assert.equal(bad.length, 0, '권한 밖 행이 내려오지 않아야 함(현재 조직 기준)');
+      assert.ok(data.datasets.every((d) => !d.mapping) && !Object.keys(data.cfg.plansReported).length, '보고 당시 매핑·계획은 관리자에게만');
+      assert.equal(await p.locator('.seg[aria-label="조직 기준 선택"]').count(), 0, '조회자는 보고 당시 기준 선택 없음');
+      assert.equal(await p.locator('text=자료 올리기').count() + await p.locator('text=이 PC에 저장').count() + await p.locator('text=파일 추가').count(), 0, '조회자는 올리기·저장 버튼 없음');
       assert.deepEqual(data.cfg.buOrder, [bu]); assert.ok(Object.keys(data.cfg.fund).length > 0, '자금·예수금은 기본적으로 모두 공개'); assert.deepEqual(data.cfg.access, []);
       assert.equal(await p.locator('.tab:has-text("검증")').count(), 0, '조회자는 관리 탭 없음');
       assert.equal(await p.locator('.seg[aria-label="본부 선택"] button').allInnerTexts().then((t) => t.join(',')), bu);

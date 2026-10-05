@@ -251,7 +251,7 @@
   }
 
   function rebuild() {
-    state.res = state.cfg && state.datasets.length ? Model.build(state.cfg, state.datasets, { fy: state.sel.fy, basis: state.sel.basis, restrictBus: SERVER && !!state.user && !state.user.all }) : null;
+    state.res = state.cfg && state.datasets.length ? Model.build(state.cfg, state.datasets, { fy: state.sel.fy, basis: canPickBasis() ? state.sel.basis : 'current', restrictBus: SERVER && !!state.user && !state.user.all }) : null;
     if (state.res && !state.res.empty) state.sel.fy = state.res.fyYear;
     if (state.res && !state.res.empty) {
       if (!state.sel.month || !state.res.months.includes(state.sel.month) || !state.res.loadedMonths.has(state.sel.month)) state.sel.month = state.res.latest;
@@ -262,6 +262,8 @@
   }
 
   // 권한이 한 본부뿐인 사람에게는 '전체' 버튼을 보여주지 않는다(전체 = 볼 수 있는 본부의 합계).
+  // '보고 당시 기준'은 PC 버전과 서버 관리자만 고를 수 있다(서버의 다른 사람은 현재 조직 기준만).
+  const canPickBasis = () => !SERVER || !!state.user?.admin;
   const canSeeTotal = () => !SERVER || !state.user || state.user.all || (state.res && state.res.buList.length > 1);
 
   function pickFiles() {
@@ -340,7 +342,7 @@
     return el('div', { class: 'filters' },
       el('div', { class: 'seg', role: 'group', 'aria-label': '본부 선택' }, bus.map((b) => el('button', {
         'aria-pressed': String(state.sel.bu === b), onclick: () => { state.sel.bu = b; render(); }, text: b }))),
-      res.hasBasis ? el('div', { class: 'seg', role: 'group', 'aria-label': '조직 기준 선택' }, [['current', '현재 조직 기준'], ['reported', '보고 당시 기준']].map(([k, label]) => el('button', {
+      res.hasBasis && canPickBasis() ? el('div', { class: 'seg', role: 'group', 'aria-label': '조직 기준 선택' }, [['current', '현재 조직 기준'], ['reported', '보고 당시 기준']].map(([k, label]) => el('button', {
         'aria-pressed': String(res.basis === k), title: k === 'reported' ? '그 달에 실제로 속했던 본부로 나눈 숫자' : '지금의 조직으로 과거까지 다시 나눈 숫자',
         onclick: () => { state.sel.basis = k; rebuild(); }, text: label }))) : null,
       res.fys.length > 1 ? el('div', { class: 'seg', role: 'group', 'aria-label': '회계연도 선택' }, res.fys.map((fy) => el('button', {

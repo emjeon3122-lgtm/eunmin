@@ -62,12 +62,21 @@ wb.save(${JSON.stringify(changed)})`]);
   // 백업 → 빈 폴더 복구 후에도 보고 당시 매핑 유지
   const backup = await p.evaluate(() => fetch('/api/admin/backup').then((r) => r.text()));
   assert.ok(JSON.parse(backup).months['2025-04'].contract.mapping, '백업에 매핑 포함');
-  // 본부 권한 필터: 6팀 사용자는 보고 당시엔 4본부·1본부였던 25.04 행도 받되(현재 기준이 6팀) 다른 본부 매핑은 받지 않음
+  // 본부 권한 필터: 보고 당시 기준은 관리자만 본다. 본부 권한자는 현재 조직 기준으로 자기 본부인 행만,
+  // 확정 때 저장한 매핑 없이 받는다(보고 당시엔 4본부였던 옛 서울4감사3 행을 4본부 사람이 받지 않음).
   const store = require('../lib/storage').createStorage(dataDir);
-  const out = filterFor({ email: 'six@test.local', admin: false, all: false, bus: ['6팀'] }, store.load().input, store.load().months);
-  const d25 = out.datasets.find((d) => d.month === '2025-04' && d.kind === 'contract');
-  assert.ok(d25.rows.length > 0 && d25.mapping.bu.every(([, bu]) => bu === '6팀'));
-  console.log('6팀 권한자 25.04 행', d25.rows.length, '건, 매핑은 6팀 것만');
+  const { input, months } = store.load();
+  const view = (u) => filterFor({ admin: false, all: false, ...u }, input, months);
+  const org = require('../lib/org').compile(input.cfg.orgRules);
+  const six = view({ email: 'six@test.local', bus: ['6팀'] });
+  const d25 = six.datasets.find((d) => d.month === '2025-04' && d.kind === 'contract');
+  assert.ok(d25.rows.length > 0 && d25.rows.every((r) => org.current(r.사업부, '2025-04') === '6팀') && !d25.mapping);
+  const four = view({ email: 'four@test.local', bus: ['4본부'] }).datasets.find((d) => d.month === '2025-04' && d.kind === 'contract');
+  assert.ok(four.rows.length > 0 && !four.rows.some((r) => r.사업부 === '서울4감사3'), '4본부 권한자는 옛 서울4감사3(현재 기준 다른 본부) 행을 받지 않음');
+  const ceo = view({ email: 'ceo@test.local', all: true, bus: [] });
+  assert.ok(ceo.datasets.every((d) => !d.mapping) && !Object.keys(ceo.cfg.plansReported).length && !ceo.cfg.access, '전체 조회자(관리자 아님)도 보고 당시 자료 없음');
+  assert.ok(filterFor({ email: 'admin@test.local', admin: true, all: true, bus: [] }, input, months).datasets.some((d) => d.mapping), '관리자는 보고 당시 매핑 받음');
+  console.log('권한 필터: 6팀', d25.rows.length, '건 / 4본부', four.rows.length, '건, 보고 당시 자료는 관리자만');
   // 직접 확정을 푼 달은 자동 확정 제외로 표시되고, 직접 다시 확정하면 해제된다.
   await api('/api/admin/unlock', { month: '2025-04' });
   const meta2 = await p.evaluate(() => fetch('/api/data').then((r) => r.json()).then((d) => d.months.find((x) => x.month === '2025-04')));
