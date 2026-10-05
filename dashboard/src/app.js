@@ -60,20 +60,22 @@
   // 전년대비 사유 작성용 엑셀: 본부 × 중분류 한 줄씩. 앞 네 칸(월·본부·중분류·사유)은 입력용 '전년대비사유' 시트와 같은 순서라
   // 머리글을 뺀 줄을 그대로 붙여 넣으면 된다(뒤의 참고 칸은 입력용에서 읽지 않음).
   function downloadYoyReview(review, m, pm) {
-    const head = ['월', '본부', '중분류', '사유 (여기에 작성)', '사유 필요', `전년 계약 (${monthLabel(pm)})`, `올해 계약 (${monthLabel(m)})`, '계약 증감', '매출 증감', '참고 (신규수임 등)']
-      .map((v) => ({ v, s: 'head' }));
+    const head = ['월', '본부', '중분류', '사유 (여기에 작성)', '사유 필요', `전년 계약 (${monthLabel(pm)})`, `올해 계약 (${monthLabel(m)})`, '계약 증감', '매출 증감',
+      '증감 분석 (고객별)', '참고 (신규수임)'].map((v) => ({ v, s: 'head' }));
     const rows = review.rows.map((r) => [r.월, r.본부, r.중분류, { v: r.사유, s: 'input' }, { v: r.검토 && !r.사유 ? '⚠' : '', s: 'warn' },
-      Math.round(r.전년계약), Math.round(r.당년계약), Math.round(r.계약증감), Math.round(r.매출증감), { v: r.참고, s: 'wrap' }]);
+      Math.round(r.전년계약), Math.round(r.당년계약), Math.round(r.계약증감), Math.round(r.매출증감),
+      { v: r.분석 ? `[${r.분석기준} 기준]\n${r.분석}` : '', s: 'wrap' }, { v: r.참고, s: 'wrap' }]);
     const guide = [
       [{ v: '전년대비 사유 작성 방법', s: 'head' }],
       [{ v: `1. '사유 작성' 시트에서 '사유 필요'에 ⚠ 표시된 줄의 노란 칸을 채웁니다. (증감이 ${fmt(state.cfg.yoyReviewMin)}백만원 이상인데 사유가 없는 줄) 다른 줄도 필요하면 적어도 됩니다.`, s: 'note' }],
+      [{ v: "   '증감 분석' 칸은 작년·올해 같은 달 계약을 회사명으로 맞춰 ① 빠진 고객 ② 새 고객 ③ 같은 고객의 금액 변화로 나눈 것입니다. 증감을 가장 크게 만든 고객을 보고 그 이유를 적으면 됩니다.", s: 'note' }],
       [{ v: '2. 사유를 적은 줄을 고릅니다. 머리글(1행)은 빼고, A열(월)부터 끝까지 줄 전체를 복사합니다.', s: 'note' }],
       [{ v: "3. 입력용.xlsx의 '전년대비사유' 시트 맨 아래 빈 줄에 붙여 넣습니다. 같은 월·본부·중분류가 이미 있으면 아래에 붙인 줄이 쓰입니다.", s: 'note' }],
       [{ v: '4. 입력용을 다시 올리면 대시보드에 사유가 나타납니다. 본부 합계와 전체의 사유는 본부·중분류 사유를 모아 자동으로 보여 줍니다.', s: 'note' }],
       [{ v: '금액 단위: 백만원. 참고 칸은 입력용에서 읽지 않으므로 함께 붙여 넣어도 됩니다.', s: 'note' }],
     ];
     const bytes = XlsxWriter.build([
-      { name: '사유 작성', cols: [9, 10, 10, 50, 8, 14, 14, 12, 12, 60], rows: [head, ...rows], freezeRows: 1 },
+      { name: '사유 작성', cols: [9, 10, 10, 45, 8, 13, 13, 11, 11, 80, 30], rows: [head, ...rows], freezeRows: 1 },
       { name: '작성 방법', cols: [110], rows: guide },
     ]);
     download(`전년대비사유_작성용_${monthLabel(m)}.xlsx`, bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

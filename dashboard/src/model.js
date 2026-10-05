@@ -503,28 +503,55 @@ const Model = (() => {
     // 입력용 '전년대비사유' 시트에 그대로 붙여 넣을 수 있게 월·본부·중분류·사유를 앞에 둔다.
     // 전년대비 사유는 본부 × 중분류 단위로만 적는다. 본부 합계·법인 전체의 사유는 아래 yoyReasonFor 가 모아 보여 준다.
     const reviewCache = new Map();
+    const SHOW_CLIENTS = 3; // 분석 문장에 이름을 보여 줄 고객 수
+    // 작년·올해 계약을 회사명으로 맞춰 증감을 ① 빠진 고객 ② 새 고객 ③ 같은 고객의 금액 변화로 나눈다
+    // (계약번호는 해마다 새로 매겨지므로 회사명으로 맞춘다).
+    function clientBreakdown(cur, prv, f) {
+      const sum = (rows) => { const m = new Map(); for (const r of rows) { const k = r.회사명 || '(회사명 없음)'; m.set(k, (m.get(k) || 0) + r[f]); } return m; };
+      const c = sum(cur); const p = sum(prv);
+      const parts = { lost: [], won: [], same: [] };
+      for (const k of new Set([...c.keys(), ...p.keys()])) {
+        const now = c.get(k) || 0; const was = p.get(k) || 0;
+        const d = { 회사명: k, 증감: now - was, now, was };
+        if (!c.has(k)) parts.lost.push(d); else if (!p.has(k)) parts.won.push(d); else if (Math.round(d.증감) !== 0) parts.same.push(d);
+      }
+      const r1 = (v) => Math.round(v);
+      const signed = (v) => `${r1(v) > 0 ? '+' : ''}${r1(v).toLocaleString('ko-KR')}`;
+      const line = (label, list, show) => {
+        if (!list.length) return null;
+        const tot = list.reduce((t, d) => t + d.증감, 0);
+        const top = [...list].sort((a, b) => Math.abs(b.증감) - Math.abs(a.증감)).slice(0, SHOW_CLIENTS).map(show);
+        return `${label} ${list.length}곳 ${signed(tot)}: ${top.join(', ')}${list.length > SHOW_CLIENTS ? ' 등' : ''}`;
+      };
+      return [
+        line('빠진 고객', parts.lost, (d) => `${d.회사명} ${r1(d.was).toLocaleString('ko-KR')}`),
+        line('새 고객', parts.won, (d) => `${d.회사명} ${r1(d.now).toLocaleString('ko-KR')}`),
+        line('같은 고객 변화', parts.same, (d) => `${d.회사명} ${signed(d.증감)}`),
+      ].filter(Boolean).join('\n');
+    }
     function yoyReviewList(m) {
       if (reviewCache.has(m)) return reviewCache.get(m);
       const y = yoyDetail(m);
       if (!y.ok) return null;
+      const group = (rows) => { const g = new Map(); for (const r of rows) { const k = `${r.본부}|${r.중분류}`; if (!g.has(k)) g.set(k, []); g.get(k).push(r); } return g; };
+      const gc = group(y.cur); const gp = group(y.prv);
+      const tot = (rows, f) => rows.reduce((s, r) => s + r[f], 0);
+      const newOf = (rows) => rows.filter((r) => r.신규여부 === 'Y');
       const out = [];
       for (const b of buList) {
         for (const c of cats) {
-          const pick = (rows) => rows.filter((r) => r.본부 === b && r.중분류 === c);
-          const cur = pick(y.cur); const prv = pick(y.prv);
+          const cur = gc.get(`${b}|${c}`) || []; const prv = gp.get(`${b}|${c}`) || [];
           if (!cur.length && !prv.length) continue;
-          const tot = (rows, f) => rows.reduce((s, r) => s + r[f], 0);
-          const newOf = (rows) => rows.filter((r) => r.신규여부 === 'Y');
-          const top = newOf(cur).sort((a, b2) => b2.계약 - a.계약).slice(0, 2)
-            .map((r) => `${r.회사명} ${Math.round(r.계약)}`);
           const row = {
             월: monthLabel(m), 본부: b, 중분류: c, 사유: yoyReason(m, b, c),
             전년계약: tot(prv, '계약'), 당년계약: tot(cur, '계약'), 전년매출: tot(prv, '매출'), 당년매출: tot(cur, '매출'),
-            참고: `신규수임 올해 ${newOf(cur).length}건 ${Math.round(tot(newOf(cur), '계약'))} / 작년 ${newOf(prv).length}건 ${Math.round(tot(newOf(prv), '계약'))}`
-              + (top.length ? ` (큰 신규: ${top.join(', ')})` : ''),
+            참고: `신규수임(ERP 신규여부 Y) 올해 ${newOf(cur).length}건 ${Math.round(tot(newOf(cur), '계약')).toLocaleString('ko-KR')} / 작년 ${newOf(prv).length}건 ${Math.round(tot(newOf(prv), '계약')).toLocaleString('ko-KR')}`,
           };
           row.계약증감 = row.당년계약 - row.전년계약; row.매출증감 = row.당년매출 - row.전년매출;
           row.검토 = needsReview(row.계약증감) || needsReview(row.매출증감);
+          // 계약으로 분석하되, 매출만 기준 이상 변했으면 매출로 분석한다.
+          row.분석기준 = !needsReview(row.계약증감) && needsReview(row.매출증감) ? '매출' : '계약';
+          row.분석 = clientBreakdown(cur, prv, row.분석기준);
           out.push(row);
         }
       }
