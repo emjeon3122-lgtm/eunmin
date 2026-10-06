@@ -46,7 +46,7 @@ if (config.authMode === 'oidc' && (!config.oidc.issuer || !config.oidc.clientId 
 if (!['local', 'oidc'].includes(config.authMode)) throw new Error('AUTH_MODE 는 local 또는 oidc 입니다.');
 
 const storage = createStorage(config.dataDir);
-const sessions = auth.createSessions(config.sessionHours, config.sessionSecret);
+const sessions = auth.createSessions(config.sessionHours, config.sessionSecret, { revokedFile: path.join(config.dataDir, 'revoked-sessions.json') });
 const limiter = auth.createLimiter();
 const oidc = config.authMode === 'oidc'
   ? auth.createOidc({ ...config.oidc, allowedDomains: config.allowedDomains, redirectUri: `${config.publicUrl}/auth/callback` })
@@ -62,6 +62,8 @@ function securityHeaders(res, nonce) {
     'img-src data: blob:', "connect-src 'self'", "form-action 'self'", "base-uri 'none'", "frame-ancestors 'none'",
   ].join('; '));
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Cache-Control', 'no-store');
   if (config.cookieSecure) res.setHeader('Strict-Transport-Security', 'max-age=31536000');

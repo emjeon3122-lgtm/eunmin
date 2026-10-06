@@ -1,6 +1,7 @@
 // 로그인: 세션 쿠키, 임시 관리자 로그인(local), 회사 계정 SSO(OIDC, Microsoft Entra ID 등)
 'use strict';
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 const random = (n = 32) => b64url(crypto.randomBytes(n));
@@ -38,14 +39,24 @@ function cookie(name, value, { maxAge, secure, sameSite = 'Lax', path = '/' } = 
 }
 
 // 세션은 SESSION_SECRET 으로 암호화한 쿠키에 담는다(AES-256-GCM). 서버를 다시 켜도 로그인이 유지된다.
-// 로그아웃한 세션은 만료 전까지 메모리의 폐기 목록으로 막는다.
-function createSessions(ttlHours, secret) {
+// 로그아웃한 세션은 만료 전까지 폐기 목록으로 막는다. revokedFile 을 주면 서버를 다시 켜도 목록이 유지된다.
+function createSessions(ttlHours, secret, { revokedFile = '' } = {}) {
   if (!secret || String(secret).length < 32) throw new Error('SESSION_SECRET 은 32자 이상이어야 합니다 (예: openssl rand -base64 48).');
   const key = crypto.createHash('sha256').update(String(secret)).digest();
   const ttl = ttlHours * 3600 * 1000;
   const revoked = new Map(); // 토큰 해시 → 만료 시각
   const hashOf = (t) => crypto.createHash('sha256').update(t).digest('base64url');
-  setInterval(() => { const now = Date.now(); for (const [k, exp] of revoked) if (exp < now) revoked.delete(k); }, 10 * 60 * 1000).unref();
+  const prune = () => { const now = Date.now(); for (const [k, exp] of revoked) if (exp < now) revoked.delete(k); };
+  if (revokedFile) {
+    try { for (const [k, exp] of JSON.parse(fs.readFileSync(revokedFile, 'utf8'))) if (typeof k === 'string' && typeof exp === 'number') revoked.set(k, exp); } catch { /* 처음 켤 때는 파일이 없다 */ }
+    prune();
+  }
+  const persist = () => {
+    if (!revokedFile) return;
+    const tmp = `${revokedFile}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify([...revoked]), { mode: 0o600 }); fs.renameSync(tmp, revokedFile);
+  };
+  setInterval(prune, 10 * 60 * 1000).unref();
   return {
     create(email, name, roles = []) {
       const iv = crypto.randomBytes(12);
@@ -66,7 +77,7 @@ function createSessions(ttlHours, secret) {
         return null; // 위조·손상된 쿠키
       }
     },
-    destroy(token) { const s = this.get(token); if (s) revoked.set(hashOf(token), s.exp); },
+    destroy(token) { const s = this.get(token); if (s) { prune(); revoked.set(hashOf(token), s.exp); persist(); } },
     maxAgeSeconds: Math.floor(ttl / 1000),
   };
 }

@@ -125,7 +125,13 @@
         if (/\.json$/i.test(f.name)) {
           const snap = Model.readSnapshot(new TextDecoder().decode(buf), f.name);
           datasets.push(...snap.datasets);
-          if (snap.input && !cfg) { cfg = Model.cfgFromPlain(snap.input.cfg); cfg.fileName = `${snap.input.fileName} (백업에서 복구)`; }
+          if (snap.input && !cfg) {
+            // 백업의 입력용 설정에는 권한 목록도 들어 있다: 서버에서는 바꾸기 전에 확인한다(출처를 모르는 백업 파일로 권한이 바뀌지 않게).
+            const acl = (snap.input.cfg?.access || []).map((a) => `${a.email} (${a.admin ? '관리자' : '조회'})`).join(', ');
+            if (!SERVER || confirm(`백업 파일 '${f.name}'의 입력용 설정으로 바꿉니다. 권한 목록도 이 파일 내용으로 바뀝니다:\n${acl || '(없음)'}\n\n계속할까요?`)) {
+              cfg = Model.cfgFromPlain(snap.input.cfg); cfg.fileName = `${snap.input.fileName} (백업에서 복구)`;
+            }
+          }
           continue;
         }
         const book = await XlsxReader.open(buf);

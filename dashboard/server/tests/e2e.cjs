@@ -180,7 +180,10 @@ function startIdp(port, clientId) {
   await rp.fill('#e', ADMIN); await rp.fill('#p', PASSWORD); await rp.click('button[type=submit]');
   await rp.waitForSelector('.drop');
   const [fc3] = await Promise.all([rp.waitForEvent('filechooser'), rp.click('text=파일 선택')]);
+  let restoreAsked = '';
+  rp.once('dialog', (d) => { restoreAsked = d.message(); d.accept(); }); // 백업으로 권한 목록을 바꾸기 전 확인
   await fc3.setFiles([backupFile]); await rp.waitForSelector('.grid', { timeout: 60000 });
+  assert.ok(restoreAsked.includes('권한 목록'), '백업 복구 전 권한 변경 확인');
   ok += compare(await metricsOf(rp, expected), expected, 'restore');
   const lockedAfter = await rp.evaluate(() => window.__dashboard.state.monthMeta.filter((x) => x.locked).map((x) => x.month));
   assert.ok(lockedAfter.includes('2026-08'), '확정 상태도 복구');
