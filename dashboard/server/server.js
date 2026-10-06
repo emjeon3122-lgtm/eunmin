@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
+const { promisify } = require('node:util');
 const crypto = require('node:crypto');
 const sanitize = require('./lib/sanitize');
 const { createStorage } = require('./lib/storage');
@@ -74,6 +75,25 @@ function send(req, res, status, body, type) {
   }
   res.writeHead(status); res.end(data);
 }
+// 보는 사람 묶음(관리자 / 전체 조회 / 본부 조합)마다 같은 자료를 보내므로, 압축한 응답을 자료가 바뀔 때까지 재사용한다.
+const dataCache = new Map(); let dataCacheVersion = -1;
+function dataPayload(user) {
+  if (dataCacheVersion !== storage.version) { dataCache.clear(); dataCacheVersion = storage.version; }
+  const key = user.admin ? 'admin' : user.all ? 'all' : `bu:${[...user.bus].sort().join('|')}`;
+  if (!dataCache.has(key)) {
+    const { input, months } = storage.load();
+    const p = gzip(Buffer.from(JSON.stringify(filterFor(user, input, months))));
+    p.catch(() => dataCache.delete(key));
+    dataCache.set(key, p);
+  }
+  return dataCache.get(key);
+}
+function sendGzipped(req, res, gz) {
+  securityHeaders(res);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) { res.setHeader('Content-Encoding', 'gzip'); res.writeHead(200); return res.end(gz); }
+  res.writeHead(200); return res.end(zlib.gunzipSync(gz));
+}
 const json = (req, res, status, obj) => send(req, res, status, JSON.stringify(obj), 'application/json; charset=utf-8');
 const redirect = (res, to, headers = {}) => { securityHeaders(res); res.writeHead(302, { Location: to, ...headers }); res.end(); };
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -94,21 +114,28 @@ function readBody(req, limit) {
     req.on('error', reject);
   });
 }
+const gunzip = promisify(zlib.gunzip);
+const gzip = promisify(zlib.gzip);
 async function readJsonBody(req) {
   const buf = await readBody(req, config.maxUploadBytes);
-  const raw = req.headers['content-encoding'] === 'gzip' ? zlib.gunzipSync(buf, { maxOutputLength: config.maxUploadBytes * 4 }) : buf;
+  let raw = buf;
+  if (req.headers['content-encoding'] === 'gzip') {
+    // 압축을 푼 크기도 올리기 한도 안에서만(압축 폭탄 방지). 깨진 압축은 400.
+    try { raw = await gunzip(buf, { maxOutputLength: config.maxUploadBytes }); } catch { throw Object.assign(new Error('올린 자료의 압축이 올바르지 않거나 너무 큽니다.'), { status: 400 }); }
+  }
   try { return JSON.parse(raw.toString('utf8')); } catch { throw Object.assign(new Error('JSON 형식이 아닙니다.'), { status: 400 }); }
 }
-const clientIp = (req) => (config.trustProxy && req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : req.socket.remoteAddress);
+// 역방향 프록시는 실제 접속 주소를 X-Forwarded-For 의 맨 뒤에 붙인다. 앞쪽 값은 접속한 사람이 마음대로 넣을 수 있으므로 쓰지 않는다.
+const clientIp = (req) => (config.trustProxy && req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',').pop().trim() : req.socket.remoteAddress);
 
 // 다른 사이트에서 보낸 요청(CSRF)을 막는다: 전용 헤더 + 같은 출처 확인
 function sameOrigin(req) {
   if (req.headers['x-dashboard'] !== '1') return false;
   const origin = req.headers.origin;
   if (!origin) return true;
-  const expected = config.publicUrl || `${config.cookieSecure ? 'https' : 'http'}://${req.headers.host}`;
-  return origin === expected;
+  return origin === expectedOrigin(req);
 }
+function expectedOrigin(req) { return config.publicUrl || `${config.cookieSecure ? 'https' : 'http'}://${req.headers.host}`; }
 
 // ---- 로그인 상태 --------------------------------------------------------------
 function currentUser(req) {
@@ -210,7 +237,9 @@ async function handle(req, res) {
     if (limiter.blocked(ip)) return loginForm(req, res, 429, '로그인 시도가 너무 많습니다. 15분 뒤에 다시 시도해 주세요.');
     const form = new URLSearchParams((await readBody(req, 10 * 1024)).toString('utf8'));
     const email = String(form.get('email') || '').trim().toLowerCase();
-    const ok = email === config.adminEmails[0] && auth.verifyPassword(form.get('password') || '', config.localPasswordHash);
+    // 이메일이 틀려도 비밀번호 확인을 똑같이 해서, 응답 시간으로 관리자 이메일을 알아낼 수 없게 한다.
+    const passwordOk = await auth.verifyPassword(form.get('password') || '', config.localPasswordHash);
+    const ok = passwordOk && email === config.adminEmails[0];
     if (!ok) { limiter.fail(ip); return loginForm(req, res, 401, '이메일 또는 비밀번호가 맞지 않습니다.'); }
     limiter.reset(ip);
     storage.audit({ by: email, action: 'login', ip });
@@ -230,6 +259,9 @@ async function handle(req, res) {
     }
   }
   if (route === 'POST /auth/logout') {
+    // 다른 사이트에서 보낸 로그아웃 요청은 무시(로그아웃 버튼은 같은 출처의 일반 양식이라 전용 헤더가 없다)
+    const origin = req.headers.origin;
+    if (origin && origin !== expectedOrigin(req)) return redirect(res, '/');
     sessions.destroy(auth.parseCookies(req.headers.cookie).sid);
     return redirect(res, '/auth/login', { 'Set-Cookie': auth.cookie('sid', '', { maxAge: 0, secure: config.cookieSecure }) });
   }
@@ -255,10 +287,11 @@ async function handle(req, res) {
     if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) { data = zlib.gzipSync(data); res.setHeader('Content-Encoding', 'gzip'); }
     res.writeHead(200); return res.end(data);
   }
-  if (route === 'GET /api/data') {
-    const { input, months } = storage.load();
-    return json(req, res, 200, { user: { email: user.email, name: session.name, admin: user.admin, all: user.all, bus: user.bus }, input: input && user.admin ? { fileName: input.fileName, updatedAt: input.updatedAt, by: input.by } : null, ...filterFor(user, input, months) });
+  if (route === 'GET /api/me') {
+    const { input } = storage.load();
+    return json(req, res, 200, { user: { email: user.email, name: session.name, admin: user.admin, all: user.all, bus: user.bus }, input: input && user.admin ? { fileName: input.fileName, updatedAt: input.updatedAt, by: input.by } : null });
   }
+  if (route === 'GET /api/data') return sendGzipped(req, res, await dataPayload(user));
   if (route === 'GET /api/admin/backup') {
     if (!user.admin) return json(req, res, 403, { error: '관리자만 할 수 있습니다.' });
     storage.audit({ by: user.email, action: 'backup-download' });
@@ -266,7 +299,7 @@ async function handle(req, res) {
     return send(req, res, 200, buildBackup(storage.load()), 'application/json; charset=utf-8');
   }
   const adminMatch = url.pathname.match(/^\/api\/admin\/([a-z]+)$/);
-  if (req.method === 'POST' && adminMatch && adminRoutes[adminMatch[1]]) {
+  if (req.method === 'POST' && adminMatch && Object.hasOwn(adminRoutes, adminMatch[1])) {
     if (!user.admin) return json(req, res, 403, { error: '관리자만 할 수 있습니다.' });
     if (!sameOrigin(req)) return json(req, res, 403, { error: '허용하지 않는 요청입니다.' });
     return json(req, res, 200, await adminRoutes[adminMatch[1]](await readJsonBody(req), user));

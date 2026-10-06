@@ -38,11 +38,13 @@ function createStorage(dataDir) {
     return cache;
   }
 
+  let version = 0; // 자료가 바뀔 때마다 1씩 늘어난다(응답 캐시를 비우는 기준)
   return {
     load,
-    saveInput(input) { writeJson(path.join(dataDir, 'input.json'), input); load().input = input; },
-    saveMonth(m, rec) { writeJson(monthFile(m), rec); load().months[m] = rec; },
-    deleteMonth(m) { fs.rmSync(monthFile(m), { force: true }); delete load().months[m]; },
+    get version() { return version; },
+    saveInput(input) { writeJson(path.join(dataDir, 'input.json'), input); load().input = input; version++; },
+    saveMonth(m, rec) { writeJson(monthFile(m), rec); load().months[m] = rec; version++; },
+    deleteMonth(m) { fs.rmSync(monthFile(m), { force: true }); delete load().months[m]; version++; },
     audit(event) {
       fs.appendFileSync(path.join(dataDir, 'audit.log'), JSON.stringify({ at: new Date().toISOString(), ...event }) + '\n', { mode: 0o600 });
     },

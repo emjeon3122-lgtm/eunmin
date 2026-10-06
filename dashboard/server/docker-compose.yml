@@ -17,3 +17,7 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    cap_drop:               # 리눅스 특수 권한은 하나도 필요 없다(7020은 일반 포트)
+      - ALL
+    mem_limit: 1g           # 메모리·프로세스 수 상한(이상 동작 시 NAS 전체에 영향이 가지 않게)
+    pids_limit: 200

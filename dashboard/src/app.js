@@ -81,7 +81,7 @@
       if (v == null) return '';
       if (typeof v === 'number') return String(v);
       let s = String(v);
-      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      if (/^[\t\r]|^\s*[=+\-@＝＋－＠]/.test(s)) s = "'" + s; // 앞 공백·전각 기호로 시작하는 수식도 막는다
       return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     return [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
@@ -105,8 +105,8 @@
   }
   async function serverLoad() {
     try {
-      const d = await api('/api/data');
-      state.user = d.user; state.monthMeta = d.months || []; state.inputMeta = d.input;
+      const [me, d] = await Promise.all([api('/api/me'), api('/api/data')]);
+      state.user = me.user; state.inputMeta = me.input; state.monthMeta = d.months || [];
       state.cfg = d.cfg ? Model.cfgFromPlain(d.cfg) : null;
       state.datasets = d.datasets || [];
       state.loadSeq++; // 서버 자료를 새로 받은 횟수(시험·디버깅용)
@@ -226,7 +226,11 @@
     if (SERVER || !Store.available()) return null;
     if (!state.persist) {
       return el('button', { class: 'btn', title: '다음에 열 때 파일을 다시 올리지 않아도 되도록 이 PC의 브라우저에 저장합니다',
-        onclick: () => { state.persist = true; persist(); }, text: '이 PC에 저장' });
+        onclick: () => {
+          // 내 PC에서 연 HTML 파일들은 브라우저 저장소를 서로 볼 수 있다: 혼자 쓰는 PC에서만 켜도록 확인한다.
+          if (!confirm('이 PC의 브라우저에 올린 엑셀을 저장합니다.\n\n여러 사람이 쓰는 PC이거나, 출처를 모르는 HTML 파일을 여는 PC라면 저장하지 마세요(같은 PC에서 연 다른 HTML 파일이 저장된 자료를 읽을 수 있습니다).\n\n저장할까요?')) return;
+          state.persist = true; persist();
+        }, text: '이 PC에 저장' });
     }
     return el('button', { class: 'btn', title: `${state.savedAt || ''} 저장 · 누르면 저장한 자료를 지웁니다`,
       onclick: async () => { if (confirm('이 PC에 저장한 자료를 지울까요? 지금 화면은 그대로 유지됩니다.')) { await forget(); render(); } },

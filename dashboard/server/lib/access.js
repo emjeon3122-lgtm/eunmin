@@ -17,9 +17,10 @@ function resolveUser(email, input, { adminEmails = [], roles = [], adminRole = '
 }
 
 function filterFor(user, input, months) {
-  const monthMeta = Object.entries(months).map(([m, r]) => ({ month: m, locked: !!r.locked, autoLockHold: !!r.autoLockHold, mappingAt: r.mapping?.at || null, updatedAt: r.updatedAt, by: user.admin ? r.by : undefined,
+  // 월별 현황: 관리자에게만 파일 이름·건수·변경자를 보낸다(다른 사람에게는 월과 확정 여부만).
+  const monthMeta = Object.entries(months).map(([m, r]) => (user.admin ? { month: m, locked: !!r.locked, autoLockHold: !!r.autoLockHold, mappingAt: r.mapping?.at || null, updatedAt: r.updatedAt, by: r.by,
     contract: r.contract ? { fileName: r.contract.fileName, sheetName: r.contract.sheetName, rows: r.contract.rows.length } : null,
-    ar: r.ar ? { fileName: r.ar.fileName, sheetName: r.ar.sheetName, rows: r.ar.rows.length } : null }));
+    ar: r.ar ? { fileName: r.ar.fileName, sheetName: r.ar.sheetName, rows: r.ar.rows.length } : null } : { month: m, locked: !!r.locked }));
   const all = [];
   for (const [m, r] of Object.entries(months)) {
     if (r.contract) all.push({ ...r.contract, kind: 'contract', month: m, locked: !!r.locked, ...(r.mapping ? { mapping: r.mapping } : {}) });

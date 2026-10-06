@@ -12,12 +12,14 @@ function hashPassword(password, { N = 16384, r = 8, p = 1 } = {}) {
   const hash = crypto.scryptSync(password, salt, 32, { N, r, p });
   return ['scrypt', N, r, p, b64url(salt), b64url(hash)].join('$');
 }
-function verifyPassword(password, stored) {
+// 비동기 scrypt: 계산하는 동안 다른 요청을 막지 않는다.
+async function verifyPassword(password, stored) {
   const parts = String(stored || '').split('$');
   if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
   const [, N, r, p, salt, hash] = parts;
   const expected = Buffer.from(hash, 'base64url');
-  const actual = crypto.scryptSync(String(password), Buffer.from(salt, 'base64url'), expected.length, { N: Number(N), r: Number(r), p: Number(p) });
+  const actual = await new Promise((resolve, reject) => crypto.scrypt(String(password), Buffer.from(salt, 'base64url'), expected.length,
+    { N: Number(N), r: Number(r), p: Number(p) }, (err, key) => (err ? reject(err) : resolve(key))));
   return crypto.timingSafeEqual(actual, expected);
 }
 
@@ -70,16 +72,31 @@ function createSessions(ttlHours, secret) {
 }
 
 // 로그인 실패가 반복되면 잠시 막는다(무차별 대입 방지).
-function createLimiter({ max = 10, windowMs = 15 * 60 * 1000 } = {}) {
+// - 주소별: 같은 주소에서 max 번 실패하면 windowMs 동안 막음
+// - 전체: 주소를 바꿔 가며 시도해도 windowMs 안에 globalMax 번 실패하면 모두 막음
+// - 기록하는 주소 수는 maxKeys 까지(넘으면 오래된 것부터 지움) — 메모리가 끝없이 늘지 않게
+function createLimiter({ max = 10, globalMax = 100, windowMs = 15 * 60 * 1000, maxKeys = 10000 } = {}) {
   const hits = new Map();
+  let global = { count: 0, first: Date.now() };
+  const fresh = (h) => Date.now() - h.first < windowMs;
   return {
-    blocked(key) { const h = hits.get(key); return !!h && h.count >= max && Date.now() - h.first < windowMs; },
-    fail(key) { const h = hits.get(key); if (!h || Date.now() - h.first > windowMs) hits.set(key, { count: 1, first: Date.now() }); else h.count++; },
+    blocked(key) {
+      if (fresh(global) && global.count >= globalMax) return true;
+      const h = hits.get(key); return !!h && h.count >= max && fresh(h);
+    },
+    fail(key) {
+      if (!fresh(global)) global = { count: 0, first: Date.now() };
+      global.count++;
+      const h = hits.get(key);
+      if (!h || !fresh(h)) { hits.delete(key); hits.set(key, { count: 1, first: Date.now() }); } else h.count++;
+      while (hits.size > maxKeys) hits.delete(hits.keys().next().value);
+    },
     reset(key) { hits.delete(key); },
   };
 }
 
 // ---- OIDC (Authorization Code + PKCE) ---------------------------------------
+const MAX_PENDING_LOGINS = 5000;
 function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, allowedDomains = [], fetchImpl = fetch }) {
   let discovery = null; let discoveredAt = 0;
   let jwks = null;
@@ -130,8 +147,10 @@ function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, all
       const m = await meta();
       const state = random(); const nonce = random(); const verifier = random(48);
       const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
-      pending.set(state, { nonce, verifier, exp: Date.now() + 10 * 60 * 1000 });
       for (const [k, v] of pending) if (v.exp < Date.now()) pending.delete(k);
+      // 로그인 화면만 계속 여는 요청으로 메모리가 늘지 않게 진행 중인 로그인 수를 제한(오래된 것부터 지움)
+      while (pending.size >= MAX_PENDING_LOGINS) pending.delete(pending.keys().next().value);
+      pending.set(state, { nonce, verifier, exp: Date.now() + 10 * 60 * 1000 });
       const q = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, scope: 'openid profile email',
         state, nonce, code_challenge: challenge, code_challenge_method: 'S256', response_mode: 'query' });
       return { url: `${m.authorization_endpoint}?${q}`, state };
