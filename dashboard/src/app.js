@@ -621,7 +621,7 @@
         el('button', { class: 'btn', text: 'CSV 다운로드', onclick: () => download(`전월대비_${F}_${monthLabel(m)}_${state.sel.bu}${cat ? '_' + cat : ''}.csv`,
           toCsv(['월', '본부', '사업부', '계약번호', '회사명', '보고서명', '중분류', '전월', '당월', '증감', '구분', '사유'],
             shown.map((r) => [monthLabel(m), r.본부, r.사업부, r.no, r.회사명, r.보고서명, r.중분류, r.전월, r.당월, r.증감, r.구분, r.사유]))) })),
-      el('p', { class: 'muted', text: "사유는 입력용.xlsx의 '사유' 시트에 월·계약번호·사유를 적으면 여기에 표시됩니다. '사유 미입력'만 골라 CSV로 받아서 채운 뒤 붙여 넣으면 편합니다." }),
+      el('p', { class: 'muted', text: "사유는 그 달 1차 가공 파일의 '사유' 열을 그대로 읽습니다. 입력용.xlsx '사유' 시트에 같은 월·계약번호를 적으면 그 값이 우선합니다(파일을 고치지 않고 사유만 바꿀 때)." }),
       momRowsTable(shown)));
     return box;
   }
@@ -726,7 +726,7 @@
           el('span', { class: 'op', text: '=', 'aria-hidden': 'true' }),
           el('span', { class: 'part' }, el('span', { class: 'l', text: '합계' }), delta(tot(c) - tot(p)))));
       const which = state.yoyList === '작년' ? p : c;
-      const reasons = state.cfg.reasons[state.yoyList === '작년' ? pm : m] || new Map();
+      const rm = state.yoyList === '작년' ? pm : m; // 사유를 찾을 달
       const top = [...which].sort((a, b) => Math.abs(b[F]) - Math.abs(a[F]));
       const head = ['계약번호', '본부', '사업부', '회사명', '보고서명', '중분류', '체결일', '신규수임', F, '사유(전월대비)'];
       drill.append(el('div', { class: 'toolbar' },
@@ -734,11 +734,11 @@
         el('div', { class: 'seg' }, [['올해', monthLabel(m)], ['작년', monthLabel(pm)]].map(([k, l]) => el('button', {
           'aria-pressed': String((state.yoyList || '올해') === k), onclick: () => { state.yoyList = k; render(); }, text: `${k} (${l})` }))),
         el('button', { class: 'btn', text: 'CSV 다운로드 (전체)', onclick: () => download(`전년대비_${F}_${state.yoyList || '올해'}_${monthLabel(m)}_${label}.csv`,
-          toCsv(head, top.map((r) => [r.no, r.본부, r.사업부, r.회사명, r.보고서명, r.중분류, r.체결일, r.신규여부, r[F], reasons.get(r.no) || '']))) })),
+          toCsv(head, top.map((r) => [r.no, r.본부, r.사업부, r.회사명, r.보고서명, r.중분류, r.체결일, r.신규여부, r[F], res.reasonOf(rm, r.no)]))) })),
       simpleTable(head, top.slice(0, TOP_N).map((r) => el('tr', {},
         el('td', { text: r.no }), el('td', { text: r.본부 }), el('td', { text: r.사업부 }), el('td', { text: r.회사명 }),
         el('td', { class: 'wrap-text', text: r.보고서명 }), el('td', { text: r.중분류 }), el('td', { text: r.체결일 }),
-        el('td', { text: r.신규여부 }), el('td', { class: 'num', text: fmt(r[F], 1) }), el('td', { class: 'wrap-text', text: reasons.get(r.no) || '' }))), 8));
+        el('td', { text: r.신규여부 }), el('td', { class: 'num', text: fmt(r[F], 1) }), el('td', { class: 'wrap-text', text: res.reasonOf(rm, r.no) }))), 8));
     }
     box.append(drill);
     return box;

@@ -180,7 +180,7 @@ const Model = (() => {
     // 서버 버전 조회 권한: 이메일 · 본부(쉼표로 여러 개, '전체'는 모든 본부) · 역할(관리자/조회)
     for (const r of await t('권한', ['이메일', '본부'])) {
       const email = text(r.get('이메일')).toLowerCase();
-      if (!email) continue;
+      if (!email.includes('@')) continue; // 비워 두거나 '-' 로 적은 줄은 건너뜀
       const bus = text(r.get('본부')).split(',').map((x) => x.trim()).filter(Boolean);
       cfg.access.push({ email, all: bus.includes(TOTAL), bus: bus.filter((x) => x !== TOTAL), admin: text(r.get('역할')) === '관리자' });
     }
@@ -225,6 +225,8 @@ const Model = (() => {
             담당이사: text(r.get('담당이사')), 체결일: parseDate(r.get('계약체결일자')), 신규여부: text(r.get('신규여부')),
             계약: num(r.get('발행예정금액')) + num(r.get('조정매출액')),
             매출: num(r.get('조정후매출액')),
+            // 1차 가공 파일의 '사유' 열(전월 대비 사유). 입력용 '사유' 시트에 같은 계약이 있으면 그쪽이 우선.
+            사유: text(r.get('사유')),
           });
         }
         // 기준월 = 등록일자 중 가장 늦은 달. 다만 마감 후 다음 달 초에 등록된 건이 섞여 있을 수 있으므로
@@ -422,13 +424,20 @@ const Model = (() => {
       };
     }
 
+    // 계약별 전월 대비 사유: 입력용 '사유' 시트 → 그 달 파일의 '사유' 열 순서로 찾는다.
+    const fileReasonCache = new Map();
+    function reasonOf(m, no) {
+      const own = cfg.reasons[m]?.get(no);
+      if (own) return own;
+      if (!fileReasonCache.has(m)) fileReasonCache.set(m, new Map((contracts.get(m)?.rows || []).filter((r) => r.사유).map((r) => [r.no, r.사유])));
+      return fileReasonCache.get(m).get(no) || '';
+    }
     // 전월 대비 계약 건별 증감. field: '계약'(발행예정금액 + 조정매출액) | '매출'(조정후매출액)
     function momDetail(m, field = '계약') {
       if (isFirst(m)) return { ok: false, why: '회계연도 첫 달은 누적이 새로 시작되어 전월 비교를 하지 않습니다.' };
       const cur = contracts.get(m); const prv = contracts.get(before(m));
       if (!cur) return { ok: false, why: `${monthLabel(m)} 자료가 없습니다.` };
       if (!prv) return { ok: false, why: `전월(${monthLabel(before(m))}) 자료를 함께 올리면 계약 건별 증감을 볼 수 있습니다.` };
-      const reasons = cfg.reasons[m] || new Map();
       const prevMap = new Map(prv.rows.map((r) => [r.no, r]));
       const seen = new Set();
       const rows = [];
@@ -438,7 +447,7 @@ const Model = (() => {
         if (Math.abs(d) < 0.5) return;
         rows.push({ 본부: buOf(r.사업부, mm), 사업부: r.사업부, no: r.no, 회사명: r.회사명, 보고서명: r.보고서명,
           계약구분: r.계약구분, 중분류: catOf(r.계약구분, mm), 신규여부: r.신규여부 || '', 전월: before_ / U, 당월: after / U, 증감: d / U,
-          구분: kind || (d > 0 ? '증가' : '감소'), 사유: reasons.get(r.no) || (kind === '신규' ? '신규' : '') });
+          구분: kind || (d > 0 ? '증가' : '감소'), 사유: reasonOf(m, r.no) || (kind === '신규' ? '신규' : '') });
       };
       for (const r of cur.rows) {
         const p = prevMap.get(r.no); seen.add(r.no);
@@ -569,7 +578,7 @@ const Model = (() => {
     return {
       empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
       hasBasis: snaps.size > 0 || org.hasHistory, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyDrivers, isFirst, before, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, reasonOf, yoyDetail, sumByCat, yoyDrivers, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
   }
@@ -591,7 +600,7 @@ const Model = (() => {
   // ---- 마감(확정) 자료 ----------------------------------------------------
   // 불러온 월별 자료 중 필요한 칸만 JSON 한 파일로 묶는다. 다시 올리면 그 달들은 확정(locked)으로 취급한다.
   const SNAP_TYPE = '실적대시보드-마감자료';
-  const C_FIELDS = ['no', '사업부', '계약구분', '상태', '회사명', '보고서명', '체결일', '신규여부', '계약', '매출'];
+  const C_FIELDS = ['no', '사업부', '계약구분', '상태', '회사명', '보고서명', '체결일', '신규여부', '계약', '매출', '사유'];
   const A_FIELDS = ['no', '사업부', '회사명', '금액'];
   const NUM_FIELDS = new Set(['계약', '매출', '금액']);
   const MAX_ROWS = 200000;

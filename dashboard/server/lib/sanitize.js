@@ -27,7 +27,7 @@ function obj(v, keyOk, valFn) {
 const anyKey = () => true;
 const pairs = (v) => arr(v).filter((p) => Array.isArray(p) && p.length === 2).map(([a, b]) => [str(a), str(b)]);
 
-const C_STR = ['no', '사업부', '계약구분', '상태', '회사명', '보고서명', '체결일', '신규여부'];
+const C_STR = ['no', '사업부', '계약구분', '상태', '회사명', '보고서명', '체결일', '신규여부', '사유'];
 const C_NUM = ['계약', '매출'];
 const A_STR = ['no', '사업부', '회사명'];
 const A_NUM = ['금액'];
