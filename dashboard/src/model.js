@@ -560,6 +560,50 @@ const Model = (() => {
       return res;
     }
 
+    // 주요 증감 요인(전년 동월 대비): 큰 것만 골라 대략적인 그림을 보여 준다.
+    // - 전체를 볼 때: 증감이 큰 본부 최대 3곳 + 각 본부의 대표 고객 최대 2곳, 나머지 본부는 '기타'로 묶음
+    // - 한 본부를 볼 때: 증감이 큰 고객 최대 3곳, 나머지는 '기타'
+    // 큰 항목의 1/5 보다 작은 것은 이름을 빼고 '기타'에 넣는다. 고객은 회사명으로 맞춘다(계약번호는 해마다 바뀜).
+    const DRIVER_MAX = 3; const DRIVER_CLIENTS = 2; const DRIVER_MIN_SHARE = 0.2;
+    const driverCache = new Map();
+    function yoyDrivers(m, b, cat, field = '계약') {
+      const key = `${m}|${b}|${cat || ''}|${field}`;
+      if (driverCache.has(key)) return driverCache.get(key);
+      const y = yoyDetail(m);
+      if (!y.ok) return null;
+      const keep = (r) => (b === TOTAL || r.본부 === b) && (!cat || r.중분류 === cat);
+      const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v);
+      const byBu = new Map(); const byClient = new Map(); // byClient: 본부 → (회사명 → 증감)
+      for (const [rows, sign] of [[y.cur, 1], [y.prv, -1]]) {
+        for (const r of rows) {
+          if (!keep(r)) continue;
+          add(byBu, r.본부, sign * r[field]);
+          if (!byClient.has(r.본부)) byClient.set(r.본부, new Map());
+          add(byClient.get(r.본부), r.회사명 || '(회사명 없음)', sign * r[field]);
+        }
+      }
+      // 큰 순으로 최대 n개, 가장 큰 것의 DRIVER_MIN_SHARE 이상만 이름을 붙이고 나머지는 합친다.
+      const top = (map, n) => {
+        const all = [...map].map(([name, d]) => ({ name, d })).sort((a, c) => Math.abs(c.d) - Math.abs(a.d));
+        const cut = Math.abs(all[0]?.d || 0) * DRIVER_MIN_SHARE;
+        const shown = all.filter((x, i) => i < n && Math.abs(x.d) >= cut && Math.round(x.d) !== 0);
+        const rest = all.slice(shown.length);
+        return { shown, rest: { count: rest.length, d: rest.reduce((t, x) => t + x.d, 0) } };
+      };
+      const total = [...byBu.values()].reduce((t, v) => t + v, 0);
+      let out;
+      if (b === TOTAL) {
+        const t = top(byBu, DRIVER_MAX);
+        out = { total, by: '본부', items: t.shown.map((x) => ({ ...x, clients: top(byClient.get(x.name), DRIVER_CLIENTS).shown
+          .filter((c) => Math.abs(c.d) >= Math.abs(x.d) * DRIVER_MIN_SHARE) })), rest: t.rest };
+      } else {
+        const t = top(byClient.get(b) || new Map(), DRIVER_MAX);
+        out = { total, by: '고객', items: t.shown.map((x) => ({ ...x, clients: [] })), rest: t.rest };
+      }
+      driverCache.set(key, out);
+      return out;
+    }
+
     // 사유 표시: 직접 적은 사유가 있으면 그것, 없으면(본부 합계·법인 전체) 그 아래 본부 × 중분류 사유를
     // 증감이 큰 순으로 모은다. → { text, auto }
     function yoyReasonFor(m, b, cat, field = '계약') {
@@ -585,7 +629,7 @@ const Model = (() => {
     return {
       empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
       hasBasis: snaps.size > 0 || org.hasHistory, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, yoyReasonFor, needsReview, yoyReviewList, isFirst, before, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, yoyReasonFor, yoyDrivers, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
   }

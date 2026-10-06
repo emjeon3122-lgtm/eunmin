@@ -686,17 +686,31 @@
       const need = n ? el('span', { class: 'need', text: state.sel.bu !== TOTAL && c ? '⚠ 사유 필요' : `⚠ 아래 항목 사유 필요 ${n}건` }) : null;
       return el('td', { class: 'wrap-text', style: 'white-space:pre-wrap' }, ...[why.text, why.text && need ? '\n' : '', need].filter(Boolean));
     };
+    // 주요 증감 요인: '6팀 ▼674  서북 −312 · 블루포인트파트너스 −270' 처럼 한 줄에 하나씩
+    const shortName = (n) => n.replace(/\(주\)|㈜|주식회사|\(유\)|유한회사|\(학\)/g, '').trim() || n;
+    const signed = (v) => `${Math.round(v) > 0 ? '+' : ''}${fmt(v)}`;
+    const driversCell = (c) => {
+      const dv = res.yoyDrivers(m, state.sel.bu, c, F);
+      if (!dv || !dv.items.length) return el('td', { class: 'muted', text: '' });
+      const lines = dv.items.map((x) => el('div', { class: 'drv' },
+        el('span', { class: 'n', text: dv.by === '본부' ? x.name : shortName(x.name) }), delta(x.d),
+        x.clients.length ? el('span', { class: 'c', text: x.clients.map((k) => `${shortName(k.name)} ${signed(k.d)}`).join(' · ') }) : null));
+      if (dv.rest.count && Math.round(dv.rest.d) !== 0) {
+        lines.push(el('div', { class: 'drv rest' }, el('span', { class: 'n', text: `기타 ${dv.rest.count}${dv.by === '본부' ? '개 본부' : '곳'}` }), delta(dv.rest.d)));
+      }
+      return el('td', { class: 'drivers' }, ...lines);
+    };
     const catRow = (c) => {
       const now = valOf(cur, F, c); const py = pyOf(c);
       return el('tr', { class: !c ? 'total' : cat === c ? 'selected' : '', style: 'cursor:pointer', onclick: () => (c ? setCat(c) : (state.sel.cat = null, render())) },
         el('td', { text: c || '합계' }), el('td', { class: 'num', text: fmt(now) }),
         el('td', { class: 'num', text: fmt(py) }), el('td', { class: 'num' }, delta(now != null && py != null ? now - py : null)),
         el('td', { class: 'num', text: pctSigned(rate(now, py)) }),
-        reasonCell(c));
+        driversCell(c), reasonCell(c));
     };
     box.append(el('section', { class: 'block' },
       el('h3', { text: `중분류별 전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
-      simpleTable(['중분류', `당월 ${F}`, `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
+      simpleTable(['중분류', `당월 ${F}`, `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', state.sel.bu === TOTAL ? '주요 증감 요인 (본부 · 대표 고객)' : '주요 증감 요인 (고객)', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
     if (y.ok) {
       const need = missing(TOTAL, null);
       box.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },

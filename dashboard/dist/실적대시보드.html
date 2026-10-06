@@ -134,6 +134,13 @@ td.wrap-text { white-space: normal; min-width: 200px; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--surface-2); }
 .muted { color: var(--muted); }
 .cards-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
+/* 전년 대비 분석: 주요 증감 요인 칸 */
+.drivers { min-width: 280px; }
+.drv { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; line-height: 1.5; }
+.drv .n { font-weight: 600; }
+.drv .delta { font-size: 13px; }
+.drv .c { font-size: 12px; color: var(--ink-2); }
+.drv.rest .n { font-weight: 400; color: var(--ink-2); }
 /* 전년 대비 구성: 신규수임 + 기존 = 합계 강조 띠 */
 .mix { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; background: var(--surface-2); border-left: 4px solid var(--accent); border-radius: 10px; padding: 12px 18px; margin: -2px 0 14px; }
 .mix .t { font-weight: 700; font-size: 14px; margin-right: 6px; }
@@ -1064,6 +1071,50 @@ const Model = (() => {
       return res;
     }
 
+    // 주요 증감 요인(전년 동월 대비): 큰 것만 골라 대략적인 그림을 보여 준다.
+    // - 전체를 볼 때: 증감이 큰 본부 최대 3곳 + 각 본부의 대표 고객 최대 2곳, 나머지 본부는 '기타'로 묶음
+    // - 한 본부를 볼 때: 증감이 큰 고객 최대 3곳, 나머지는 '기타'
+    // 큰 항목의 1/5 보다 작은 것은 이름을 빼고 '기타'에 넣는다. 고객은 회사명으로 맞춘다(계약번호는 해마다 바뀜).
+    const DRIVER_MAX = 3; const DRIVER_CLIENTS = 2; const DRIVER_MIN_SHARE = 0.2;
+    const driverCache = new Map();
+    function yoyDrivers(m, b, cat, field = '계약') {
+      const key = `${m}|${b}|${cat || ''}|${field}`;
+      if (driverCache.has(key)) return driverCache.get(key);
+      const y = yoyDetail(m);
+      if (!y.ok) return null;
+      const keep = (r) => (b === TOTAL || r.본부 === b) && (!cat || r.중분류 === cat);
+      const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v);
+      const byBu = new Map(); const byClient = new Map(); // byClient: 본부 → (회사명 → 증감)
+      for (const [rows, sign] of [[y.cur, 1], [y.prv, -1]]) {
+        for (const r of rows) {
+          if (!keep(r)) continue;
+          add(byBu, r.본부, sign * r[field]);
+          if (!byClient.has(r.본부)) byClient.set(r.본부, new Map());
+          add(byClient.get(r.본부), r.회사명 || '(회사명 없음)', sign * r[field]);
+        }
+      }
+      // 큰 순으로 최대 n개, 가장 큰 것의 DRIVER_MIN_SHARE 이상만 이름을 붙이고 나머지는 합친다.
+      const top = (map, n) => {
+        const all = [...map].map(([name, d]) => ({ name, d })).sort((a, c) => Math.abs(c.d) - Math.abs(a.d));
+        const cut = Math.abs(all[0]?.d || 0) * DRIVER_MIN_SHARE;
+        const shown = all.filter((x, i) => i < n && Math.abs(x.d) >= cut && Math.round(x.d) !== 0);
+        const rest = all.slice(shown.length);
+        return { shown, rest: { count: rest.length, d: rest.reduce((t, x) => t + x.d, 0) } };
+      };
+      const total = [...byBu.values()].reduce((t, v) => t + v, 0);
+      let out;
+      if (b === TOTAL) {
+        const t = top(byBu, DRIVER_MAX);
+        out = { total, by: '본부', items: t.shown.map((x) => ({ ...x, clients: top(byClient.get(x.name), DRIVER_CLIENTS).shown
+          .filter((c) => Math.abs(c.d) >= Math.abs(x.d) * DRIVER_MIN_SHARE) })), rest: t.rest };
+      } else {
+        const t = top(byClient.get(b) || new Map(), DRIVER_MAX);
+        out = { total, by: '고객', items: t.shown.map((x) => ({ ...x, clients: [] })), rest: t.rest };
+      }
+      driverCache.set(key, out);
+      return out;
+    }
+
     // 사유 표시: 직접 적은 사유가 있으면 그것, 없으면(본부 합계·법인 전체) 그 아래 본부 × 중분류 사유를
     // 증감이 큰 순으로 모은다. → { text, auto }
     function yoyReasonFor(m, b, cat, field = '계약') {
@@ -1089,7 +1140,7 @@ const Model = (() => {
     return {
       empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
       hasBasis: snaps.size > 0 || org.hasHistory, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, yoyReasonFor, needsReview, yoyReviewList, isFirst, before, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, yoyReasonFor, yoyDrivers, needsReview, yoyReviewList, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
   }
@@ -1903,17 +1954,31 @@ const Store = (() => {
       const need = n ? el('span', { class: 'need', text: state.sel.bu !== TOTAL && c ? '⚠ 사유 필요' : `⚠ 아래 항목 사유 필요 ${n}건` }) : null;
       return el('td', { class: 'wrap-text', style: 'white-space:pre-wrap' }, ...[why.text, why.text && need ? '\n' : '', need].filter(Boolean));
     };
+    // 주요 증감 요인: '6팀 ▼674  서북 −312 · 블루포인트파트너스 −270' 처럼 한 줄에 하나씩
+    const shortName = (n) => n.replace(/\(주\)|㈜|주식회사|\(유\)|유한회사|\(학\)/g, '').trim() || n;
+    const signed = (v) => `${Math.round(v) > 0 ? '+' : ''}${fmt(v)}`;
+    const driversCell = (c) => {
+      const dv = res.yoyDrivers(m, state.sel.bu, c, F);
+      if (!dv || !dv.items.length) return el('td', { class: 'muted', text: '' });
+      const lines = dv.items.map((x) => el('div', { class: 'drv' },
+        el('span', { class: 'n', text: dv.by === '본부' ? x.name : shortName(x.name) }), delta(x.d),
+        x.clients.length ? el('span', { class: 'c', text: x.clients.map((k) => `${shortName(k.name)} ${signed(k.d)}`).join(' · ') }) : null));
+      if (dv.rest.count && Math.round(dv.rest.d) !== 0) {
+        lines.push(el('div', { class: 'drv rest' }, el('span', { class: 'n', text: `기타 ${dv.rest.count}${dv.by === '본부' ? '개 본부' : '곳'}` }), delta(dv.rest.d)));
+      }
+      return el('td', { class: 'drivers' }, ...lines);
+    };
     const catRow = (c) => {
       const now = valOf(cur, F, c); const py = pyOf(c);
       return el('tr', { class: !c ? 'total' : cat === c ? 'selected' : '', style: 'cursor:pointer', onclick: () => (c ? setCat(c) : (state.sel.cat = null, render())) },
         el('td', { text: c || '합계' }), el('td', { class: 'num', text: fmt(now) }),
         el('td', { class: 'num', text: fmt(py) }), el('td', { class: 'num' }, delta(now != null && py != null ? now - py : null)),
         el('td', { class: 'num', text: pctSigned(rate(now, py)) }),
-        reasonCell(c));
+        driversCell(c), reasonCell(c));
     };
     box.append(el('section', { class: 'block' },
       el('h3', { text: `중분류별 전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
-      simpleTable(['중분류', `당월 ${F}`, `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
+      simpleTable(['중분류', `당월 ${F}`, `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', state.sel.bu === TOTAL ? '주요 증감 요인 (본부 · 대표 고객)' : '주요 증감 요인 (고객)', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
     if (y.ok) {
       const need = missing(TOTAL, null);
       box.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },
