@@ -6,6 +6,24 @@
   const VERSION = typeof DASHBOARD_VERSION !== 'undefined' ? DASHBOARD_VERSION : '개발';
   const footer = () => el('div', { class: 'foot', text: `실적 대시보드 버전 ${VERSION}${SERVER ? ' · 회사 서버' : ' · PC 파일'}` });
   const state = { user: null, monthMeta: [], inputMeta: null, notice: [], busy: '', loadSeq: 0, cfg: null, datasets: [], files: [], persist: false, savedAt: null, res: null, errors: [], sel: { month: null, bu: TOTAL, cat: null, basis: 'current' }, tab: 'dash', mom: { kind: '전체', q: '' }, field: '계약', yoyList: '올해' };
+  // 밝게/어둡게: 사람마다 고른 값을 이 브라우저에 기억한다(없으면 컴퓨터 설정을 따름).
+  const THEME_KEY = 'dashboard-theme';
+  const root = document.documentElement;
+  try { const t = localStorage.getItem(THEME_KEY); if (t === 'dark' || t === 'light') root.dataset.theme = t; } catch { /* 저장소를 못 쓰면 컴퓨터 설정을 따른다 */ }
+  const isDark = () => (root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches);
+  function themeSwitch() {
+    const dark = isDark();
+    return el('button', { class: 'theme-switch', role: 'switch', 'aria-checked': String(dark), 'aria-label': '어두운 화면',
+      title: dark ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기',
+      onclick: () => {
+        root.dataset.theme = isDark() ? 'light' : 'dark';
+        try { localStorage.setItem(THEME_KEY, root.dataset.theme); } catch { /* 이번 화면에만 적용 */ }
+        render(); // 그래프 색을 새 테마로 다시 그린다
+      } },
+    el('span', { class: 'ico', text: '☀', 'aria-hidden': 'true' }),
+    el('span', { class: 'track', 'aria-hidden': 'true' }, el('span', { class: 'knob' })),
+    el('span', { class: 'ico', text: '☾', 'aria-hidden': 'true' }));
+  }
   const charts = [];
   const pendingCharts = []; // 캔버스가 화면에 붙은 뒤에 그려야 크기가 맞는다
   const app = document.getElementById('app');
@@ -263,6 +281,7 @@
         el('h1', { text: `${cfg.company ? cfg.company + ' ' : ''}FY${res.fyYear} 사업계획 및 실적` }),
         el('span', { class: 'asof', text: cur.asOf ? `기준일 ${cur.asOf} (ERP 등록일자 기준)` : '' }),
         el('span', { class: 'spacer' }),
+        themeSwitch(),
         ...(SERVER ? [
           el('span', { class: 'asof', text: state.user ? `${state.user.email}${state.user.admin ? ' (관리자)' : ''}` : '' }),
           state.user?.admin ? el('button', { class: 'btn', onclick: pickFiles, text: '자료 올리기' }) : null,
