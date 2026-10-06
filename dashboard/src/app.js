@@ -323,7 +323,7 @@
       res.hasBasis && canPickBasis() ? el('div', { class: 'seg', role: 'group', 'aria-label': '조직 기준 선택' }, [['current', '현재 조직 기준'], ['reported', '보고 당시 기준']].map(([k, label]) => el('button', {
         'aria-pressed': String(res.basis === k), title: k === 'reported' ? '그 달에 실제로 속했던 본부로 나눈 숫자' : '지금의 조직으로 과거까지 다시 나눈 숫자',
         onclick: () => { state.sel.basis = k; rebuild(); }, text: label }))) : null,
-      res.fys.length > 1 ? el('div', { class: 'seg', role: 'group', 'aria-label': '회계연도 선택' }, res.fys.map((fy) => el('button', {
+      res.fys.length > 1 ? el('div', { class: 'seg fy', role: 'group', 'aria-label': '회계연도 선택' }, res.fys.map((fy) => el('button', {
         'aria-pressed': String(res.fyYear === fy), onclick: () => { state.sel.fy = fy; state.sel.month = null; rebuild(); }, text: `FY${fy}` }))) : null,
       el('div', { class: 'seg', role: 'group', 'aria-label': '월 선택' }, res.months.map((m) => {
         const locked = res.contracts.get(m)?.locked;
@@ -521,7 +521,7 @@
   function fieldToggle(extra) {
     return el('div', { class: 'toolbar' },
       el('span', { class: 'muted', text: '비교 기준' }),
-      el('div', { class: 'seg' }, ['계약', '매출'].map((k) => el('button', { 'aria-pressed': String(state.field === k), onclick: () => { state.field = k; render(); }, text: k }))),
+      el('div', { class: 'seg field', role: 'group', 'aria-label': '비교 기준 선택' }, ['계약', '매출'].map((k) => el('button', { 'aria-pressed': String(state.field === k), onclick: () => { state.field = k; render(); }, text: k }))),
       state.sel.cat ? el('button', { class: 'btn', onclick: () => setCat(state.sel.cat), text: `중분류: ${state.sel.cat} ✕` }) : null,
       extra || null);
   }
