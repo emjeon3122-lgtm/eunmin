@@ -732,11 +732,13 @@
           stat(`올해 신규수임(Y) ${part(c, true).length}건`, fmt(tot(part(c, true))), `작년 ${part(p, true).length}건 ${fmt(tot(part(p, true)))}`),
           stat(`올해 기존 ${part(c, false).length}건`, fmt(tot(part(c, false))), `작년 ${part(p, false).length}건 ${fmt(tot(part(p, false)))}`),
           stat('합계 증감', fmt(tot(c) - tot(p)), `올해 ${fmt(tot(c))} / 작년 ${fmt(tot(p))}`)),
-        // 신규·기존이 각각 얼마나 늘고 줄어 합계 증감이 됐는지 한 줄로
-        el('div', { class: 'toolbar', style: 'margin:-4px 0 12px' }, el('span', { class: 'muted', text: '작년 대비 증감:' }),
-          el('span', { text: '신규수임' }), delta(tot(part(c, true)) - tot(part(p, true))),
-          el('span', { text: '· 기존' }), delta(tot(part(c, false)) - tot(part(p, false))),
-          el('span', { text: '→ 합계' }), delta(tot(c) - tot(p))));
+        // 신규·기존이 각각 얼마나 늘고 줄어 합계 증감이 됐는지: 신규수임 + 기존 = 합계
+        el('div', { class: 'mix', role: 'group', 'aria-label': '작년 대비 증감 구성' }, el('span', { class: 't', text: '작년 대비 증감 구성' }),
+          el('span', { class: 'part' }, el('span', { class: 'l', text: '신규수임' }), delta(tot(part(c, true)) - tot(part(p, true)))),
+          el('span', { class: 'op', text: '+', 'aria-hidden': 'true' }),
+          el('span', { class: 'part' }, el('span', { class: 'l', text: '기존' }), delta(tot(part(c, false)) - tot(part(p, false)))),
+          el('span', { class: 'op', text: '=', 'aria-hidden': 'true' }),
+          el('span', { class: 'part' }, el('span', { class: 'l', text: '합계' }), delta(tot(c) - tot(p)))));
       const which = state.yoyList === '작년' ? p : c;
       const reasons = state.cfg.reasons[state.yoyList === '작년' ? pm : m] || new Map();
       const top = [...which].sort((a, b) => Math.abs(b[F]) - Math.abs(a[F]));

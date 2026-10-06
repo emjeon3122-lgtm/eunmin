@@ -134,6 +134,13 @@ td.wrap-text { white-space: normal; min-width: 200px; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--surface-2); }
 .muted { color: var(--muted); }
 .cards-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
+/* 전년 대비 구성: 신규수임 + 기존 = 합계 강조 띠 */
+.mix { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; background: var(--surface-2); border-left: 4px solid var(--accent); border-radius: 10px; padding: 12px 18px; margin: -2px 0 14px; }
+.mix .t { font-weight: 700; font-size: 14px; margin-right: 6px; }
+.mix .part { display: inline-flex; align-items: baseline; gap: 8px; }
+.mix .l { font-size: 14px; color: var(--ink-2); }
+.mix .delta { font-size: 22px; font-weight: 700; }
+.mix .op { font-size: 22px; font-weight: 300; color: var(--muted); }
 .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
 .stat .k { color: var(--ink-2); font-size: 12px; }
 .stat .v { font-size: 22px; font-weight: 700; }
@@ -174,7 +181,7 @@ section.block h3 { font-size: 15px; margin: 0 0 8px; }
 <body>
 <div class="wrap" id="app"></div>
 <script>
-const DASHBOARD_VERSION = '2026.10.05-4';
+const DASHBOARD_VERSION = '2026.10.06';
 </script>
 <script>
 /* chart.umd.min.js */
@@ -1942,11 +1949,13 @@ const Store = (() => {
           stat(`올해 신규수임(Y) ${part(c, true).length}건`, fmt(tot(part(c, true))), `작년 ${part(p, true).length}건 ${fmt(tot(part(p, true)))}`),
           stat(`올해 기존 ${part(c, false).length}건`, fmt(tot(part(c, false))), `작년 ${part(p, false).length}건 ${fmt(tot(part(p, false)))}`),
           stat('합계 증감', fmt(tot(c) - tot(p)), `올해 ${fmt(tot(c))} / 작년 ${fmt(tot(p))}`)),
-        // 신규·기존이 각각 얼마나 늘고 줄어 합계 증감이 됐는지 한 줄로
-        el('div', { class: 'toolbar', style: 'margin:-4px 0 12px' }, el('span', { class: 'muted', text: '작년 대비 증감:' }),
-          el('span', { text: '신규수임' }), delta(tot(part(c, true)) - tot(part(p, true))),
-          el('span', { text: '· 기존' }), delta(tot(part(c, false)) - tot(part(p, false))),
-          el('span', { text: '→ 합계' }), delta(tot(c) - tot(p))));
+        // 신규·기존이 각각 얼마나 늘고 줄어 합계 증감이 됐는지: 신규수임 + 기존 = 합계
+        el('div', { class: 'mix', role: 'group', 'aria-label': '작년 대비 증감 구성' }, el('span', { class: 't', text: '작년 대비 증감 구성' }),
+          el('span', { class: 'part' }, el('span', { class: 'l', text: '신규수임' }), delta(tot(part(c, true)) - tot(part(p, true)))),
+          el('span', { class: 'op', text: '+', 'aria-hidden': 'true' }),
+          el('span', { class: 'part' }, el('span', { class: 'l', text: '기존' }), delta(tot(part(c, false)) - tot(part(p, false)))),
+          el('span', { class: 'op', text: '=', 'aria-hidden': 'true' }),
+          el('span', { class: 'part' }, el('span', { class: 'l', text: '합계' }), delta(tot(c) - tot(p)))));
       const which = state.yoyList === '작년' ? p : c;
       const reasons = state.cfg.reasons[state.yoyList === '작년' ? pm : m] || new Map();
       const top = [...which].sort((a, b) => Math.abs(b[F]) - Math.abs(a[F]));
