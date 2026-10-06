@@ -130,6 +130,7 @@ td.wrap-text { white-space: normal; min-width: 200px; }
 .drv .n { font-weight: 600; }
 .drv .delta { font-size: 13px; }
 .drv .c { font-size: 12px; color: var(--ink-2); }
+.drv .timing { font-size: 11px; color: var(--warn-ink); background: var(--warn-bg); border-radius: 4px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
 .drv.rest .n { font-weight: 400; color: var(--ink-2); }
 /* 전년 대비 구성: 신규수임 + 기존 = 합계 강조 띠 */
 .mix { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; background: var(--surface-2); border-left: 4px solid var(--accent); border-radius: 10px; padding: 12px 18px; margin: -2px 0 14px; }

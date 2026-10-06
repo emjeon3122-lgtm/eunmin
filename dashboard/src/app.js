@@ -660,9 +660,11 @@
     const driversCell = (c) => {
       const dv = res.yoyDrivers(m, state.sel.bu, c, F);
       if (!dv || !dv.items.length) return el('td', { class: 'muted', text: '' });
+      // 작년 같은 달엔 없고 작년 그 뒤에 계약한 고객: 시기 차이 표시
+      const timing = (k) => (k.later ? el('span', { class: 'timing', title: '작년에는 이 달보다 늦게 계약해서 같은 달 비교에 없었던 고객입니다', text: `작년엔 ${monthLabel(k.later)} 계약` }) : null);
       const lines = dv.items.map((x) => el('div', { class: 'drv' },
-        el('span', { class: 'n', text: dv.by === '본부' ? x.name : shortName(x.name) }), delta(x.d),
-        x.clients.length ? el('span', { class: 'c', text: x.clients.map((k) => `${shortName(k.name)} ${signed(k.d)}`).join(' · ') }) : null));
+        el('span', { class: 'n', text: dv.by === '본부' ? x.name : shortName(x.name) }), delta(x.d), timing(x),
+        ...x.clients.map((k, i) => el('span', { class: 'c' }, `${i ? '· ' : ''}${shortName(k.name)} ${signed(k.d)}`, timing(k)))));
       if (dv.rest.count && Math.round(dv.rest.d) !== 0) {
         lines.push(el('div', { class: 'drv rest' }, el('span', { class: 'n', text: `기타 ${dv.rest.count}${dv.by === '본부' ? '개 본부' : '곳'}` }), delta(dv.rest.d)));
       }
