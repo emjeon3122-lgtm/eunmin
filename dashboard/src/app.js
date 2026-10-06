@@ -115,11 +115,13 @@
     }
     rebuild();
   }
+  // 입력용(회계연도 시작월 등 설정)을 먼저 읽어야 같은 묶음의 월별 파일 이름을 그 설정으로 해석한다.
+  const inputFirst = (files) => [...files].sort((a, b) => /입력/.test(b.name) - /입력/.test(a.name));
   // 관리자: 엑셀은 이 브라우저에서 읽고, 읽은 결과만 서버에 보낸다.
   async function uploadToServer(files) {
     state.errors = []; state.notice = [];
     let cfg = null; const datasets = [];
-    for (const f of files) {
+    for (const f of inputFirst(files)) {
       try {
         const buf = await f.arrayBuffer();
         if (/\.json$/i.test(f.name)) {
@@ -178,7 +180,7 @@
   async function loadFiles(files, { restoring = false, months = null } = {}) {
     if (SERVER) return state.user?.admin ? uploadToServer(files) : undefined;
     state.errors = [];
-    for (const f of files) {
+    for (const f of inputFirst(files)) {
       try {
         const buf = await f.arrayBuffer();
         if (/\.json$/i.test(f.name)) {
@@ -656,7 +658,7 @@
     for (const k of ['계약', '매출']) {
       const cv = el('canvas', { role: 'img', 'aria-label': `월별 누적 ${k} 올해와 작년 비교` });
       trend.append(el('div', { class: 'card' },
-        el('div', { class: 'head' }, el('h2', { text: `월별 누적 ${k} · ${state.sel.bu}` }), el('span', { class: 'unit', text: '(단위: 백만원)' })),
+        el('div', { class: 'head' }, el('h2', { text: `월별 누적 ${k} · ${state.sel.bu}` }), el('span', { class: 'unit', text: `(단위: ${state.cfg.unit === 1000000 ? '백만원' : `${fmt(state.cfg.unit)}원`})` })),
         el('div', { class: 'chart' }, cv),
         legend([[`FY${res.fyYear}`, series(0)], [`FY${res.fyYear - 1}`, css('--muted')]])));
       chart(cv, {

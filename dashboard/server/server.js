@@ -13,7 +13,7 @@ const { resolveUser, filterFor } = require('./lib/access');
 const auth = require('./lib/auth');
 const { buildBackup, scheduleBackups } = require('./lib/backup');
 const { scheduleAutoLock } = require('./lib/autolock');
-const { effectiveMapping } = require('./lib/mapping');
+const { effectiveMapping, frozenContract } = require('./lib/mapping');
 
 // ---- 설정 -------------------------------------------------------------------
 const env = process.env;
@@ -176,10 +176,11 @@ const adminRoutes = {
       const d = sanitize.dataset(raw);
       const rec = { ...monthRecord(d.month) };
       if (rec.locked && !d.locked) { skipped.push({ month: d.month, kind: d.kind, fileName: d.fileName, why: 'locked' }); continue; }
-      const { kind, month, locked, mapping, ...rest } = d;
+      const { kind, month, locked, mapping, autoLockHold, ...rest } = d;
       rec[kind] = rest;
       // 마감자료·백업에서 온 확정 자료는 그때 저장한 보고 당시 매핑을 그대로 쓴다.
       if (locked) { rec.locked = true; if (kind === 'contract' && mapping) rec.mapping = mapping; }
+      else if (autoLockHold) rec.autoLockHold = true; // 백업 복구: 관리자가 직접 푼 달은 자동 확정에서 계속 제외
       storage.saveMonth(month, stamp(rec, user));
       saved.push({ month, kind, fileName: d.fileName, locked: !!rec.locked });
     }
@@ -195,7 +196,7 @@ const adminRoutes = {
       // 확정하는 순간의 본부·중분류 매핑을 '보고 당시 기준'으로 함께 저장한다.
       if (m <= body.upto && rec.contract && !rec.locked) {
         const { autoLockHold, ...keep } = rec; // 직접 확정하면 자동 확정 제외 표시도 지운다
-        storage.saveMonth(m, stamp({ ...keep, locked: true, mapping: effectiveMapping(input.cfg, m) }, user)); locked.push(m);
+        storage.saveMonth(m, stamp({ ...keep, contract: frozenContract(input.cfg, m, keep.contract), locked: true, mapping: effectiveMapping(input.cfg, m) }, user)); locked.push(m);
       }
     }
     storage.audit({ by: user.email, action: 'lock', upto: body.upto, locked });

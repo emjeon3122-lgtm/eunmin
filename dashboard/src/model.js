@@ -13,8 +13,10 @@ const Model = (() => {
   const text = (v) => (v == null ? '' : String(v).trim());
   const num = (v) => {
     if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
-    const n = parseFloat(text(v).replace(/,/g, ''));
-    return Number.isFinite(n) ? n : 0;
+    const t = text(v).replace(/,/g, '');
+    const neg = /^\(.*\)$/.test(t); // 회계 표기 (100) = -100
+    const n = parseFloat(neg ? t.slice(1, -1) : t);
+    return Number.isFinite(n) ? (neg ? -n : n) : 0;
   };
   const numOrNull = (v) => (v == null || text(v) === '' ? null : num(v));
 
@@ -71,7 +73,7 @@ const Model = (() => {
 
   // ---- 표 읽기 -------------------------------------------------------------
   // 처음 몇 줄 안에서 필수 헤더가 모두 있는 줄을 헤더로 본다.
-  function findHeader(rows, required, scan = 6) {
+  function findHeader(rows, required, scan = 20) {
     for (let r = 0; r < Math.min(scan, rows.length); r++) {
       const idx = new Map();
       (rows[r] || []).forEach((v, i) => { const k = norm(v); if (k && !idx.has(k)) idx.set(k, i); });
@@ -262,7 +264,7 @@ const Model = (() => {
       found.filter((d) => d.kind === 'contract' && !d.manual.length).forEach((d) => { d.manual = summaryManual; d.noId = summaryManual.length; });
     }
     // 미수금 시트는 같은 파일의 계약 시트 기준월을 따른다.
-    const cMonth = found.find((d) => d.kind === 'contract' && d.month)?.month || parseMonth(fileName);
+    const cMonth = found.find((d) => d.kind === 'contract' && d.month)?.month || nameMonth;
     found.filter((d) => d.kind === 'ar').forEach((d) => { d.month = cMonth; });
     return found;
   }
@@ -317,11 +319,17 @@ const Model = (() => {
     const catOf = (s, m) => { const sp = snapOf(m); return (sp ? sp.cat.get(norm(s)) : cfg.catMap.get(norm(s))) || UNMAPPED; };
 
     // 기장 수기분: 입력용 '기장추가'에 그 달이 있으면 그 값, 없으면 올린 파일의 수기 행(계약번호 없는 행)을 쓴다.
+    // 기장 수기분: 확정한 달은 확정할 때 고정한 수기 행, 아니면 입력용 '기장추가'에 그 달이 있으면 그 값, 없으면 파일의 수기 행.
     const gijangFor = (m) => {
-      const g = cfg.gijang.filter((x) => x.month === m);
-      return g.length ? g : (contracts.get(m)?.manual || []).map((x) => ({ ...x, month: m }));
+      const d = contracts.get(m);
+      const g = d?.locked ? [] : cfg.gijang.filter((x) => x.month === m);
+      return g.length ? g : (d?.manual || []).map((x) => ({ ...x, month: m }));
     };
-    const gijangSource = (m) => (cfg.gijang.some((x) => x.month === m) ? '입력용 기장추가' : contracts.get(m)?.manual?.length ? '파일의 수기 행' : '');
+    const gijangSource = (m) => {
+      const d = contracts.get(m);
+      if (!d?.locked && cfg.gijang.some((x) => x.month === m)) return '입력용 기장추가';
+      return d?.manual?.length ? (d.locked ? '확정 때 고정한 수기 행' : '파일의 수기 행') : '';
+    };
     const unmappedBu = new Map();
     const unmappedCat = new Map();
     const agg = {};
@@ -358,7 +366,8 @@ const Model = (() => {
     const extraBu = new Set();
     Object.values(agg).forEach((a) => Object.keys(a).forEach((b) => { if (!cfg.buOrder.includes(b)) extraBu.add(b); }));
     // 서버에서 일부 본부만 볼 수 있는 사람은 권한 본부 버튼만 보여준다.
-    const buList = opts.restrictBus ? [...cfg.buOrder] : [...cfg.buOrder, ...extraBu];
+    // 사업계획에 없는 본부(새로 생긴 본부 등)도 자료가 있으면 버튼을 만든다. 서버 권한자는 자기 본부 자료만 받으므로 그 본부만 더해진다.
+    const buList = [...cfg.buOrder, ...extraBu];
     const cats = [...cfg.catOrder, ...(unmappedCat.size ? [UNMAPPED] : [])];
 
     const sumOver = (b, f) => {
@@ -438,10 +447,8 @@ const Model = (() => {
       const cur = contracts.get(m); const prv = contracts.get(before(m));
       if (!cur) return { ok: false, why: `${monthLabel(m)} 자료가 없습니다.` };
       if (!prv) return { ok: false, why: `전월(${monthLabel(before(m))}) 자료를 함께 올리면 계약 건별 증감을 볼 수 있습니다.` };
-      const prevMap = new Map(prv.rows.map((r) => [r.no, r]));
-      const seen = new Set();
-      const rows = [];
       const pm = before(m);
+      const rows = [];
       const push = (r, before_, after, kind, mm = m) => {
         const d = after - before_;
         if (Math.abs(d) < 0.5) return;
@@ -449,17 +456,25 @@ const Model = (() => {
           계약구분: r.계약구분, 중분류: catOf(r.계약구분, mm), 신규여부: r.신규여부 || '', 전월: before_ / U, 당월: after / U, 증감: d / U,
           구분: kind || (d > 0 ? '증가' : '감소'), 사유: reasonOf(m, r.no) || (kind === '신규' ? '신규' : '') });
       };
-      for (const r of cur.rows) {
-        const p = prevMap.get(r.no); seen.add(r.no);
-        // 같은 계약이라도 사업부·계약구분이 바뀌면 이전 분류에서 빼고 새 분류에 더한다(중분류·본부별 합계가 맞도록).
-        if (p && (buOf(p.사업부, pm) !== buOf(r.사업부, m) || catOf(p.계약구분, pm) !== catOf(r.계약구분, m))) {
-          push(p, p[field], 0, '분류변경', pm);
-          push(r, 0, r[field], '분류변경');
-          continue;
+      // 같은 계약번호가 한 달에 여러 줄(예: +금액 줄과 -취소 줄)일 수 있으므로 계약번호 × 본부 × 중분류로 합친 뒤 비교한다.
+      // 본부·중분류가 바뀐 계약은 '분류변경'으로 이전 분류에서 빼고 새 분류에 더한다(중분류·본부별 합계가 맞도록).
+      const group = (list, mm) => {
+        const g = new Map();
+        for (const r of list) {
+          const k = `${r.no}\u0000${buOf(r.사업부, mm)}\u0000${catOf(r.계약구분, mm)}`;
+          const x = g.get(k);
+          if (x) x.v += r[field]; else g.set(k, { r, v: r[field] });
         }
-        push(r, p ? p[field] : 0, r[field], p ? null : '신규');
+        return g;
+      };
+      const curG = group(cur.rows, m); const prvG = group(prv.rows, pm);
+      const curNos = new Set(cur.rows.map((r) => r.no)); const prvNos = new Set(prv.rows.map((r) => r.no));
+      for (const [k, { r, v }] of curG) {
+        const p = prvG.get(k);
+        if (p) push(r, p.v, v, null);
+        else push(r, 0, v, prvNos.has(r.no) ? '분류변경' : '신규');
       }
-      for (const p of prv.rows) if (!seen.has(p.no)) push(p, p[field], 0, '삭제', pm);
+      for (const [k, { r, v }] of prvG) if (!curG.has(k)) push(r, v, 0, curNos.has(r.no) ? '분류변경' : '삭제', pm);
       // 기장 수기분은 사업부별 합계로 비교
       const gSum = (mm) => {
         const s = new Map();
@@ -610,6 +625,12 @@ const Model = (() => {
     return { bu: Org.compile(cfg.orgRules).snapshot(m), cat: [...cfg.catMap], at: new Date().toISOString() };
   }
 
+  // 확정할 때 그 달 기장 수기분을 고정한다: 입력용 '기장추가'에 그 달이 있으면 그 값, 없으면 파일의 수기 행.
+  // (server/lib/mapping.js frozenContract 와 같은 규칙)
+  function frozenContract(cfg, m, d) {
+    const g = (cfg.gijang || []).filter((x) => x.month === m).map(({ month, ...rest }) => rest);
+    return g.length ? { ...d, manual: g, noId: g.length } : d;
+  }
   function exportSnapshot(datasets, upto, cfg) {
     const { contracts, ars } = pickActive(datasets);
     const months = {};
@@ -618,7 +639,7 @@ const Model = (() => {
     for (const [m, d] of contracts) {
       if (m > upto) continue;
       const mapping = d.mapping || (cfg ? effectiveMapping(cfg, m) : null);
-      (months[m] ||= {}).contract = { ...pack(d, C_FIELDS), ...(mapping ? { mapping } : {}) };
+      (months[m] ||= {}).contract = { ...pack(cfg && !d.locked ? frozenContract(cfg, m, d) : d, C_FIELDS), ...(mapping ? { mapping } : {}) };
     }
     for (const [m, d] of ars) if (m <= upto) (months[m] ||= {}).ar = pack(d, A_FIELDS);
     return JSON.stringify({ type: SNAP_TYPE, version: 1, createdAt: new Date().toISOString(), upto, months });
@@ -647,7 +668,7 @@ const Model = (() => {
       const pairs = (x) => (Array.isArray(x) ? x.filter((p) => Array.isArray(p) && p.length === 2).map(([a, b]) => [text(a), text(b)]) : []);
       const mapping = mp && typeof mp === 'object' && Array.isArray(mp.bu) ? { bu: pairs(mp.bu), cat: pairs(mp.cat), at: text(mp.at) } : null;
       if (c) out.push({ kind: 'contract', fileName, sheetName: `마감 ${monthLabel(m)} (${text(v.contract.fileName)})`, rows: c, month: m,
-        asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: v.locked !== false, ...(mapping ? { mapping } : {}) });
+        asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: v.locked !== false, ...(v.autoLockHold === true ? { autoLockHold: true } : {}), ...(mapping ? { mapping } : {}) });
       const a = unpack(v.ar, A_FIELDS);
       if (a) out.push({ kind: 'ar', fileName, sheetName: `마감 ${monthLabel(m)} 미수금`, rows: a, month: m, locked: v.locked !== false });
     }

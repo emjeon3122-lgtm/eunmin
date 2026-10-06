@@ -12,7 +12,7 @@ function buildBackup({ input, months }) {
   const pack = (d, fields) => ({ fileName: d.fileName, sheetName: d.sheetName, asOf: d.asOf || null, noId: d.noId || 0,
     fields, rows: d.rows.map((r) => fields.map((f) => r[f] ?? null)), manual: d.manual || [] });
   for (const [m, rec] of Object.entries(months)) {
-    out[m] = { locked: !!rec.locked };
+    out[m] = { locked: !!rec.locked, ...(rec.autoLockHold ? { autoLockHold: true } : {}) };
     if (rec.contract) out[m].contract = { ...pack(rec.contract, C_FIELDS), ...(rec.mapping ? { mapping: rec.mapping } : {}) };
     if (rec.ar) out[m].ar = pack(rec.ar, A_FIELDS);
   }

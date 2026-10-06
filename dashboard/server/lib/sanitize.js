@@ -54,6 +54,7 @@ function dataset(d) {
     out.noId = out.manual.length;
     out.asOf = typeof d.asOf === 'string' && DATE_RE.test(d.asOf) ? d.asOf : null;
     if (d.mapping && typeof d.mapping === 'object') out.mapping = mapping(d.mapping);
+    if (d.autoLockHold === true && !out.locked) out.autoLockHold = true;
   } else {
     out.rows = d.rows.map((r) => row(r, A_STR, A_NUM));
   }
