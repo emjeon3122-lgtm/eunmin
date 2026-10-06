@@ -121,7 +121,6 @@ tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); font-weigh
 td.wrap-text { white-space: normal; min-width: 200px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
 .toolbar input[type="search"] { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); min-width: 220px; }
-.need { color: var(--bad); font-size: 12px; font-weight: 600; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--surface-2); }
 .muted { color: var(--muted); }
 .cards-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }

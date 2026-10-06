@@ -47,7 +47,7 @@ function filterFor(user, input, months) {
   const visibleNos = new Set();
   datasets.forEach((d) => { if (d.kind === 'contract') d.rows.forEach((r) => visibleNos.add(r.no)); });
   const out = {
-    company: cfg.company, fyStart: cfg.fyStart, unit: cfg.unit, yoyReviewMin: cfg.yoyReviewMin, catOrder: cfg.catOrder, catMap: cfg.catMap,
+    company: cfg.company, fyStart: cfg.fyStart, unit: cfg.unit, catOrder: cfg.catOrder, catMap: cfg.catMap,
     buOrder: cfg.buOrder.filter((b) => allowed.has(b)),
     plans: Object.fromEntries(Object.entries(cfg.plans).map(([fy, v]) => [fy, pickBus(v)])),
     // 관련된 사업부는 이력 전체를 보낸다(최근 줄이 있어야 현재 조직 기준 계산이 맞다).
@@ -58,7 +58,6 @@ function filterFor(user, input, months) {
     fund: cfg.fundScope === 'all-only' ? {} : cfg.fund, fundScope: cfg.fundScope,
     gijang: cfg.gijang.filter(inScope(null)),
     reasons: Object.fromEntries(Object.entries(cfg.reasons).map(([m, list]) => [m, list.filter(([no]) => visibleNos.has(no))])),
-    yoyReasons: cfg.yoyReasons.filter(([k]) => allowed.has(k.split('|')[1])),
     access: [],
   };
   return { cfg: out, datasets, months: monthMeta };

@@ -57,30 +57,6 @@
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  // 전년대비 사유 작성용 엑셀: 본부 × 중분류 한 줄씩. 앞 네 칸(월·본부·중분류·사유)은 입력용 '전년대비사유' 시트와 같은 순서라
-  // 머리글을 뺀 줄을 그대로 붙여 넣으면 된다(뒤의 참고 칸은 입력용에서 읽지 않음).
-  function downloadYoyReview(review, m, pm) {
-    const head = ['월', '본부', '중분류', '사유 (여기에 작성)', '사유 필요', `전년 계약 (${monthLabel(pm)})`, `올해 계약 (${monthLabel(m)})`, '계약 증감', '매출 증감',
-      '증감 분석 (고객별)', '참고 (신규수임)'].map((v) => ({ v, s: 'head' }));
-    const rows = review.rows.map((r) => [r.월, r.본부, r.중분류, { v: r.사유, s: 'input' }, { v: r.검토 && !r.사유 ? '⚠' : '', s: 'warn' },
-      Math.round(r.전년계약), Math.round(r.당년계약), Math.round(r.계약증감), Math.round(r.매출증감),
-      { v: r.분석 ? `[${r.분석기준} 기준]\n${r.분석}` : '', s: 'wrap' }, { v: r.참고, s: 'wrap' }]);
-    const guide = [
-      [{ v: '전년대비 사유 작성 방법', s: 'head' }],
-      [{ v: `1. '사유 작성' 시트에서 '사유 필요'에 ⚠ 표시된 줄의 노란 칸을 채웁니다. (증감이 ${fmt(state.cfg.yoyReviewMin)}백만원 이상인데 사유가 없는 줄) 다른 줄도 필요하면 적어도 됩니다.`, s: 'note' }],
-      [{ v: "   '증감 분석' 칸은 작년·올해 같은 달 계약을 회사명으로 맞춰 ① 빠진 고객 ② 새 고객 ③ 같은 고객의 금액 변화로 나눈 것입니다. 증감을 가장 크게 만든 고객을 보고 그 이유를 적으면 됩니다.", s: 'note' }],
-      [{ v: '2. 사유를 적은 줄을 고릅니다. 머리글(1행)은 빼고, A열(월)부터 끝까지 줄 전체를 복사합니다.', s: 'note' }],
-      [{ v: "3. 입력용.xlsx의 '전년대비사유' 시트 맨 아래 빈 줄에 붙여 넣습니다. 같은 월·본부·중분류가 이미 있으면 아래에 붙인 줄이 쓰입니다.", s: 'note' }],
-      [{ v: '4. 입력용을 다시 올리면 대시보드에 사유가 나타납니다. 본부 합계와 전체의 사유는 본부·중분류 사유를 모아 자동으로 보여 줍니다.', s: 'note' }],
-      [{ v: '금액 단위: 백만원. 참고 칸은 입력용에서 읽지 않으므로 함께 붙여 넣어도 됩니다.', s: 'note' }],
-    ];
-    const bytes = XlsxWriter.build([
-      { name: '사유 작성', cols: [9, 10, 10, 45, 8, 13, 13, 11, 11, 80, 30], rows: [head, ...rows], freezeRows: 1 },
-      { name: '작성 방법', cols: [110], rows: guide },
-    ]);
-    download(`전년대비사유_작성용_${monthLabel(m)}.xlsx`, bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  }
-
   // 엑셀 수식 주입 방지: =, +, -, @ 로 시작하는 문자열 앞에 ' 를 붙인다.
   function toCsv(header, rows) {
     const cell = (v) => {
@@ -549,9 +525,10 @@
       state.sel.cat ? el('button', { class: 'btn', onclick: () => setCat(state.sel.cat), text: `중분류: ${state.sel.cat} ✕` }) : null,
       extra || null);
   }
-  function simpleTable(header, rows, numFrom = 1) {
+  // numFrom ~ numTo-1 번째 머리글은 숫자 칸(오른쪽 정렬)
+  function simpleTable(header, rows, numFrom = 1, numTo = header.length) {
     return el('div', { class: 'table-wrap' }, el('table', {},
-      el('thead', {}, el('tr', {}, header.map((h, i) => el('th', { class: i >= numFrom ? 'num' : '', text: h })))),
+      el('thead', {}, el('tr', {}, header.map((h, i) => el('th', { class: i >= numFrom && i < numTo ? 'num' : '', text: h })))),
       el('tbody', {}, rows)));
   }
   // 계약 건별 증감 표 (전월 대비)
@@ -677,15 +654,6 @@
     const prvRows = y.ok ? y.prv.filter(inBu) : [];
     const pyCat = y.ok ? res.sumByCat(prvRows, F) : null;
     const pyOf = (c) => (!pyCat ? null : c ? pyCat[c] : Object.values(pyCat).reduce((s, v) => s + v, 0));
-    const review = y.ok ? res.yoyReviewList(m) : null;
-    // 사유를 적어야 하는데 비어 있는 본부 × 중분류 수(본부 합계·전체 행은 그 아래 항목을 센다)
-    const missing = (b, c) => (review ? review.rows.filter((r) => r.검토 && !r.사유 && (b === TOTAL || r.본부 === b) && (!c || r.중분류 === c)).length : 0);
-    const reasonCell = (c) => {
-      const why = res.yoyReasonFor(m, state.sel.bu, c, F);
-      const n = missing(state.sel.bu, c);
-      const need = n ? el('span', { class: 'need', text: state.sel.bu !== TOTAL && c ? '⚠ 사유 필요' : `⚠ 아래 항목 사유 필요 ${n}건` }) : null;
-      return el('td', { class: 'wrap-text', style: 'white-space:pre-wrap' }, ...[why.text, why.text && need ? '\n' : '', need].filter(Boolean));
-    };
     // 주요 증감 요인: '6팀 ▼674  서북 −312 · 블루포인트파트너스 −270' 처럼 한 줄에 하나씩
     const shortName = (n) => n.replace(/\(주\)|㈜|주식회사|\(유\)|유한회사|\(학\)/g, '').trim() || n;
     const signed = (v) => `${Math.round(v) > 0 ? '+' : ''}${fmt(v)}`;
@@ -706,43 +674,26 @@
         el('td', { text: c || '합계' }), el('td', { class: 'num', text: fmt(now) }),
         el('td', { class: 'num', text: fmt(py) }), el('td', { class: 'num' }, delta(now != null && py != null ? now - py : null)),
         el('td', { class: 'num', text: pctSigned(rate(now, py)) }),
-        driversCell(c), reasonCell(c));
+        driversCell(c));
     };
     box.append(el('section', { class: 'block' },
-      el('h3', { text: `중분류별 전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 계약과 사유가 나옵니다)` }),
-      simpleTable(['중분류', `당월 ${F}`, `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', state.sel.bu === TOTAL ? '주요 증감 요인 (본부 · 대표 고객)' : '주요 증감 요인 (고객)', '전년대비 사유'], [...res.cats.map(catRow), catRow(null)])));
+      el('h3', { text: `중분류별 전년 대비 · ${state.sel.bu} (행을 누르면 아래에 그 중분류의 구성과 주요 계약이 나옵니다)` }),
+      simpleTable(['중분류', `당월 ${F}`, `전년 동월 (${monthLabel(pm)})`, '전년대비', '증감률', state.sel.bu === TOTAL ? '주요 증감 요인 (본부 · 대표 고객)' : '주요 증감 요인 (고객)'], [...res.cats.map(catRow), catRow(null)], 1, 5)));
     if (y.ok) {
-      const need = missing(TOTAL, null);
-      box.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },
-        el('div', { class: 'k', text: '전년대비 사유 작성' }),
-        el('div', { class: 'toolbar', style: 'margin:4px 0' },
-          el('button', { class: 'btn primary', text: '사유 작성용 엑셀 받기', onclick: () => downloadYoyReview(review, m, pm) }),
-          el('span', { class: 'muted', text: need ? `사유가 필요한 본부·중분류 ${need}개 (증감 ${fmt(state.cfg.yoyReviewMin)} 이상)` : '사유가 필요한 항목이 모두 채워졌습니다.' })),
-        el('div', { class: 'muted', text: "사유는 본부 × 중분류별로만 적으면 됩니다. 본부 합계와 전체의 사유는 자동으로 모아서 보여 줍니다. 받은 엑셀의 노란 '사유' 칸을 채운 뒤, 머리글을 뺀 줄들을 입력용.xlsx '전년대비사유' 시트 맨 아래에 붙여 넣고 입력용을 다시 올리세요." })));
       const gap = pyOf(null) - (cur[pyKey] ?? pyOf(null));
       if (Math.abs(gap) >= 0.5) box.append(el('div', { class: 'warnings', text: `작년 ${monthLabel(pm)} 원본 합계(${fmt(pyOf(null))})와 입력용 '전년실적'(${fmt(cur[pyKey])})이 ${fmt(gap)}만큼 다릅니다. 중분류별 전년 값은 원본 기준이라 조직개편 조정이나 원본에 없는 수기분이 빠져 있을 수 있습니다.` }));
     } else box.append(el('p', { class: 'muted', text: y.why }));
 
     // 선택한 중분류의 변동 내역
     const label = `${state.sel.bu}${cat ? ' · ' + cat : ''}`;
-    const drill = el('section', { class: 'block' }, el('h3', { text: `${label} — 무엇 때문에 달라졌나` }));
-    const reason = res.yoyReasonFor(m, state.sel.bu, cat, F);
-    const detail = state.sel.bu !== TOTAL && cat;
-    drill.append(el('div', { class: 'stat', style: 'margin-bottom:12px' },
-      el('div', { class: 'k', text: reason.auto ? '전년대비 사유 (본부·중분류별 사유 모음, 증감 큰 순)' : '전년대비 사유' }),
-      reason.text ? el('div', { style: 'white-space:pre-wrap;font-size:15px', text: reason.text })
-        : el('div', { class: 'muted', text: detail
-          ? `'사유 작성용 엑셀'에서 ${state.sel.bu} · ${cat} 줄의 사유를 채워 입력용에 붙여 넣으면 여기에 표시됩니다.`
-          : '아래 본부·중분류에 적은 사유가 여기에 모여서 표시됩니다.' })));
-
+    const drill = el('section', { class: 'block' }, el('h3', { text: `${label} — 전년 대비 구성${y.ok ? ` (${monthLabel(pm)} → ${monthLabel(m)}, ERP '신규여부' 기준)` : ''}` }));
     // 전년 대비 구성과 주요 계약
     if (y.ok) {
       const sel = (rows) => rows.filter((r) => !cat || r.중분류 === cat);
       const c = sel(curRows); const p = sel(prvRows);
       const part = (rows, isNew) => rows.filter((r) => (r.신규여부 === 'Y') === isNew);
       const tot = (rows) => rows.reduce((s, r) => s + r[F], 0);
-      drill.append(el('h3', { text: `전년 대비 구성 (${monthLabel(pm)} → ${monthLabel(m)}, ERP '신규여부' 기준)` }),
-        el('div', { class: 'cards-row' },
+      drill.append(el('div', { class: 'cards-row' },
           stat(`올해 신규수임(Y) ${part(c, true).length}건`, fmt(tot(part(c, true))), `작년 ${part(p, true).length}건 ${fmt(tot(part(p, true)))}`),
           stat(`올해 기존 ${part(c, false).length}건`, fmt(tot(part(c, false))), `작년 ${part(p, false).length}건 ${fmt(tot(part(p, false)))}`),
           stat('합계 증감', fmt(tot(c) - tot(p)), `올해 ${fmt(tot(c))} / 작년 ${fmt(tot(p))}`)),

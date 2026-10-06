@@ -99,9 +99,9 @@ const Model = (() => {
   async function readInput(book) {
     const t = async (name, req) => (book.sheetNames.includes(name) ? table(await book.rows(name), req) || [] : []);
     const cfg = {
-      company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, fundScope: 'everyone', autoLockDay: null,
+      company: '', fyStart: 4, unit: 1000000, catOrder: [], fundScope: 'everyone', autoLockDay: null,
       buOrder: [], plans: {}, plansReported: {}, orgRules: [], catMap: new Map(),
-      people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, yoyReasons: new Map(), access: [],
+      people: {}, fund: {}, prev: {}, arManual: {}, gijang: [], reasons: {}, access: [],
       problems: [],
     };
     for (const r of await t('설정', ['항목', '값'])) {
@@ -111,7 +111,6 @@ const Model = (() => {
       else if (k.startsWith('금액단위') && num(v) > 0) cfg.unit = num(v);
       // 자금·예수금 공개 범위: '모두'(기본) 또는 '전체권한자'(전체 권한이 있는 사람만)
       else if (k.startsWith('자금')) cfg.fundScope = norm(v).includes('전체권한') ? 'all-only' : 'everyone';
-      else if (k.startsWith('전년대비검토기준') && num(v) >= 0) cfg.yoyReviewMin = num(v);
       // 서버 버전: 매월 이 날짜가 되면 지난달까지 자동 확정(1~28, 비우면 끔)
       else if (k.startsWith('자동확정')) {
         const d = Number(String(v ?? '').replace(/[^0-9]/g, ''));
@@ -177,12 +176,6 @@ const Model = (() => {
     for (const r of await t('사유', ['월', '계약번호', '사유'])) {
       const m = monthOf(r, '사유'); if (!m) continue;
       (cfg.reasons[m] ||= new Map()).set(text(r.get('계약번호')), text(r.get('사유')));
-    }
-    // 전년 대비 사유: 본부·중분류 단위 (비워 두면 전체)
-    for (const r of await t('전년대비사유', ['월', '본부', '중분류', '사유'])) {
-      const m = monthOf(r, '전년대비사유'); if (!m || !text(r.get('사유'))) continue;
-      const c = text(r.get('중분류'));
-      cfg.yoyReasons.set(`${m}|${text(r.get('본부')) || TOTAL}|${!c || c === '합계' ? TOTAL : c}`, text(r.get('사유')));
     }
     // 서버 버전 조회 권한: 이메일 · 본부(쉼표로 여러 개, '전체'는 모든 본부) · 역할(관리자/조회)
     for (const r of await t('권한', ['이메일', '본부'])) {
@@ -496,70 +489,6 @@ const Model = (() => {
       rows.forEach((r) => { out[r.중분류] = (out[r.중분류] || 0) + r[field]; });
       return out;
     };
-    const yoyReason = (m, b, cat) => cfg.yoyReasons.get(`${m}|${b}|${cat || TOTAL}`) || '';
-    const needsReview = (d) => d != null && Math.abs(d) >= cfg.yoyReviewMin;
-
-    // 사유 작성용 목록: 본부 × 중분류(합계 포함) 전년 동월 대비 변화와 참고 정보.
-    // 입력용 '전년대비사유' 시트에 그대로 붙여 넣을 수 있게 월·본부·중분류·사유를 앞에 둔다.
-    // 전년대비 사유는 본부 × 중분류 단위로만 적는다. 본부 합계·법인 전체의 사유는 아래 yoyReasonFor 가 모아 보여 준다.
-    const reviewCache = new Map();
-    const SHOW_CLIENTS = 3; // 분석 문장에 이름을 보여 줄 고객 수
-    // 작년·올해 계약을 회사명으로 맞춰 증감을 ① 빠진 고객 ② 새 고객 ③ 같은 고객의 금액 변화로 나눈다
-    // (계약번호는 해마다 새로 매겨지므로 회사명으로 맞춘다).
-    function clientBreakdown(cur, prv, f) {
-      const sum = (rows) => { const m = new Map(); for (const r of rows) { const k = r.회사명 || '(회사명 없음)'; m.set(k, (m.get(k) || 0) + r[f]); } return m; };
-      const c = sum(cur); const p = sum(prv);
-      const parts = { lost: [], won: [], same: [] };
-      for (const k of new Set([...c.keys(), ...p.keys()])) {
-        const now = c.get(k) || 0; const was = p.get(k) || 0;
-        const d = { 회사명: k, 증감: now - was, now, was };
-        if (!c.has(k)) parts.lost.push(d); else if (!p.has(k)) parts.won.push(d); else if (Math.round(d.증감) !== 0) parts.same.push(d);
-      }
-      const r1 = (v) => Math.round(v);
-      const signed = (v) => `${r1(v) > 0 ? '+' : ''}${r1(v).toLocaleString('ko-KR')}`;
-      const line = (label, list, show) => {
-        if (!list.length) return null;
-        const tot = list.reduce((t, d) => t + d.증감, 0);
-        const top = [...list].sort((a, b) => Math.abs(b.증감) - Math.abs(a.증감)).slice(0, SHOW_CLIENTS).map(show);
-        return `${label} ${list.length}곳 ${signed(tot)}: ${top.join(', ')}${list.length > SHOW_CLIENTS ? ' 등' : ''}`;
-      };
-      return [
-        line('빠진 고객', parts.lost, (d) => `${d.회사명} ${r1(d.was).toLocaleString('ko-KR')}`),
-        line('새 고객', parts.won, (d) => `${d.회사명} ${r1(d.now).toLocaleString('ko-KR')}`),
-        line('같은 고객 변화', parts.same, (d) => `${d.회사명} ${signed(d.증감)}`),
-      ].filter(Boolean).join('\n');
-    }
-    function yoyReviewList(m) {
-      if (reviewCache.has(m)) return reviewCache.get(m);
-      const y = yoyDetail(m);
-      if (!y.ok) return null;
-      const group = (rows) => { const g = new Map(); for (const r of rows) { const k = `${r.본부}|${r.중분류}`; if (!g.has(k)) g.set(k, []); g.get(k).push(r); } return g; };
-      const gc = group(y.cur); const gp = group(y.prv);
-      const tot = (rows, f) => rows.reduce((s, r) => s + r[f], 0);
-      const newOf = (rows) => rows.filter((r) => r.신규여부 === 'Y');
-      const out = [];
-      for (const b of buList) {
-        for (const c of cats) {
-          const cur = gc.get(`${b}|${c}`) || []; const prv = gp.get(`${b}|${c}`) || [];
-          if (!cur.length && !prv.length) continue;
-          const row = {
-            월: monthLabel(m), 본부: b, 중분류: c, 사유: yoyReason(m, b, c),
-            전년계약: tot(prv, '계약'), 당년계약: tot(cur, '계약'), 전년매출: tot(prv, '매출'), 당년매출: tot(cur, '매출'),
-            참고: `신규수임(ERP 신규여부 Y) 올해 ${newOf(cur).length}건 ${Math.round(tot(newOf(cur), '계약')).toLocaleString('ko-KR')} / 작년 ${newOf(prv).length}건 ${Math.round(tot(newOf(prv), '계약')).toLocaleString('ko-KR')}`,
-          };
-          row.계약증감 = row.당년계약 - row.전년계약; row.매출증감 = row.당년매출 - row.전년매출;
-          row.검토 = needsReview(row.계약증감) || needsReview(row.매출증감);
-          // 계약으로 분석하되, 매출만 기준 이상 변했으면 매출로 분석한다.
-          row.분석기준 = !needsReview(row.계약증감) && needsReview(row.매출증감) ? '매출' : '계약';
-          row.분석 = clientBreakdown(cur, prv, row.분석기준);
-          out.push(row);
-        }
-      }
-      const res = { prevMonth: y.prevMonth, rows: out };
-      reviewCache.set(m, res);
-      return res;
-    }
-
     // 주요 증감 요인(전년 동월 대비): 큰 것만 골라 대략적인 그림을 보여 준다.
     // - 전체를 볼 때: 증감이 큰 본부 최대 3곳 + 각 본부의 대표 고객 최대 2곳, 나머지 본부는 '기타'로 묶음
     // - 한 본부를 볼 때: 증감이 큰 고객 최대 3곳, 나머지는 '기타'
@@ -604,20 +533,6 @@ const Model = (() => {
       return out;
     }
 
-    // 사유 표시: 직접 적은 사유가 있으면 그것, 없으면(본부 합계·법인 전체) 그 아래 본부 × 중분류 사유를
-    // 증감이 큰 순으로 모은다. → { text, auto }
-    function yoyReasonFor(m, b, cat, field = '계약') {
-      const own = yoyReason(m, b, cat);
-      if (own || (b !== TOTAL && cat)) return { text: own, auto: false };
-      const list = yoyReviewList(m);
-      if (!list) return { text: '', auto: false };
-      const key = field === '매출' ? '매출증감' : '계약증감';
-      const lines = list.rows.filter((r) => r.사유 && (b === TOTAL || r.본부 === b) && (!cat || r.중분류 === cat))
-        .sort((a, c) => Math.abs(c[key]) - Math.abs(a[key]))
-        .map((r) => `${[b === TOTAL ? r.본부 : '', cat ? '' : r.중분류].filter(Boolean).join(' · ')}: ${r.사유}`);
-      return { text: lines.join('\n'), auto: lines.length > 0 };
-    }
-
     const summaryRows = [];
     for (const m of months) {
       for (const b of [...buList, TOTAL]) {
@@ -629,7 +544,7 @@ const Model = (() => {
     return {
       empty: false, warnings, gijangFor, gijangSource, buOf, catOf, basis: reported ? 'reported' : 'current',
       hasBasis: snaps.size > 0 || org.hasHistory, snapshotAt: (m) => snaps.get(m)?.at || null, months, fys, fyYear, fyFirst, fyLast, latest, buList, cats,
-      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyReason, yoyReasonFor, yoyDrivers, needsReview, yoyReviewList, isFirst, before, summaryRows,
+      loadedMonths: new Set(loaded), contracts, ars, metric, momDetail, yoyDetail, sumByCat, yoyDrivers, isFirst, before, summaryRows,
       unmappedBu, unmappedCat,
     };
   }
@@ -637,14 +552,14 @@ const Model = (() => {
   // ---- 설정값 주고받기(서버 버전) -----------------------------------------
   // Map 은 JSON 으로 보낼 수 없으므로 [키, 값] 배열로 바꾼다.
   function cfgToPlain(cfg) {
-    return { ...cfg, catMap: [...cfg.catMap], yoyReasons: [...cfg.yoyReasons],
+    return { ...cfg, catMap: [...cfg.catMap],
       reasons: Object.fromEntries(Object.entries(cfg.reasons).map(([m, mp]) => [m, [...mp]])) };
   }
   function cfgFromPlain(p) {
     const pairs = (v) => (Array.isArray(v) ? v.filter((x) => Array.isArray(x) && x.length === 2) : []);
-    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], yoyReviewMin: 100, buOrder: [], orgRules: [], plansReported: {}, plans: {}, people: {}, fund: {},
+    return { company: '', fyStart: 4, unit: 1000000, catOrder: [], buOrder: [], orgRules: [], plansReported: {}, plans: {}, people: {}, fund: {},
       prev: {}, arManual: {}, gijang: [], access: [], problems: [], ...p,
-      catMap: new Map(pairs(p.catMap)), yoyReasons: new Map(pairs(p.yoyReasons)),
+      catMap: new Map(pairs(p.catMap)),
       reasons: Object.fromEntries(Object.entries(p.reasons || {}).map(([m, v]) => [m, new Map(pairs(v))])) };
   }
 

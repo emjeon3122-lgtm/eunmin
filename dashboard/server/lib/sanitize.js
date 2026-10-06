@@ -69,7 +69,6 @@ function config(p) {
     company: str(p.company, 200),
     fyStart: fyStart >= 1 && fyStart <= 12 ? fyStart : 4,
     unit: num(p.unit) > 0 ? num(p.unit) : 1000000,
-    yoyReviewMin: num(p.yoyReviewMin) >= 0 ? num(p.yoyReviewMin) : 100,
     fundScope: p.fundScope === 'all-only' ? 'all-only' : 'everyone',
     autoLockDay: Number.isInteger(p.autoLockDay) && p.autoLockDay >= 1 && p.autoLockDay <= 28 ? p.autoLockDay : null,
     catOrder: arr(p.catOrder, 100).map((x) => str(x, 100)),
@@ -86,7 +85,6 @@ function config(p) {
     arManual: obj(p.arManual, isMonth, numMap),
     gijang: arr(p.gijang, 10000).filter((g) => g && isMonth(g.month)).map((g) => ({ month: g.month, ...manualRow(g) })),
     reasons: obj(p.reasons, isMonth, pairs),
-    yoyReasons: pairs(p.yoyReasons),
     access: arr(p.access, 5000).map((a) => ({
       email: str(a && a.email, 320).trim().toLowerCase(), all: a && a.all === true, admin: a && a.admin === true,
       bus: arr(a && a.bus, 200).map((x) => str(x, 100)),
