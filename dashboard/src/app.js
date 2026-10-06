@@ -519,8 +519,8 @@
   const setCat = (c) => { state.sel.cat = state.sel.cat === c ? null : c; render(); };
 
   function fieldToggle(extra) {
-    return el('div', { class: 'toolbar' },
-      el('span', { class: 'muted', text: '비교 기준' }),
+    return el('div', { class: 'toolbar fieldbar' },
+      el('span', { class: 'label', text: '비교 기준' }),
       el('div', { class: 'seg field', role: 'group', 'aria-label': '비교 기준 선택' }, ['계약', '매출'].map((k) => el('button', { 'aria-pressed': String(state.field === k), onclick: () => { state.field = k; render(); }, text: k }))),
       state.sel.cat ? el('button', { class: 'btn', onclick: () => setCat(state.sel.cat), text: `중분류: ${state.sel.cat} ✕` }) : null,
       extra || null);

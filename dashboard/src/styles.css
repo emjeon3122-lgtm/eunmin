@@ -9,13 +9,14 @@
   --grid: #e1e0d9;
   --axis: #c3c2b7;
   --border: rgba(11, 11, 11, 0.10);
-  --accent: #2a78d6;
+  --accent: #1d3557; /* 선택 버튼·탭 밑줄 등 (그래프 색과 겹치지 않는 네이비) */
   --accent-ink: #ffffff;
   --good: #006300;
   --bad: #d03b3b;
   --warn-bg: #fff4d6;
   --warn-ink: #6b4a00;
-  --pick-fy: #4a3aa7; --pick-field: #0b7a5c; /* 회계연도·계약/매출 선택 버튼 색 */
+  --pick-fy: #8e2c48; --pick-field: #9a6324; /* 회계연도(와인)·계약/매출(카멜) 선택 버튼 색 */
+  --field-bg: #fbf3e8; --field-line: #e7d3b6; --field-ink: #6b4416; /* 비교 기준 강조 띠 */
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
   --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
 }
@@ -25,9 +26,10 @@
     --page: #0d0d0d; --surface: #1a1a19; --surface-2: #262624;
     --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
-    --accent: #3987e5; --good: #0ca30c; --bad: #e66767;
+    --accent: #6a8fc9; --good: #0ca30c; --bad: #e66767;
     --warn-bg: #3a2e10; --warn-ink: #f5d98a;
-    --pick-fy: #6f5fd6; --pick-field: #13916d;
+    --pick-fy: #b8536f; --pick-field: #b07b3c;
+    --field-bg: #2a2116; --field-line: #4a3a26; --field-ink: #e2c08f;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
     --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
   }
@@ -37,9 +39,10 @@
   --page: #0d0d0d; --surface: #1a1a19; --surface-2: #262624;
   --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
   --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
-  --accent: #3987e5; --good: #0ca30c; --bad: #e66767;
+  --accent: #6a8fc9; --good: #0ca30c; --bad: #e66767;
   --warn-bg: #3a2e10; --warn-ink: #f5d98a;
-  --pick-fy: #6f5fd6; --pick-field: #13916d;
+  --pick-fy: #b8536f; --pick-field: #b07b3c;
+  --field-bg: #2a2116; --field-line: #4a3a26; --field-ink: #e2c08f;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
   --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
 }
@@ -83,7 +86,10 @@ button { font: inherit; color: inherit; }
 .seg.fy button[aria-pressed="true"], .seg.fy button[aria-pressed="true"]:hover { background: var(--pick-fy); }
 .seg.fy button { border-color: color-mix(in srgb, var(--pick-fy) 35%, transparent); }
 .seg.field button[aria-pressed="true"], .seg.field button[aria-pressed="true"]:hover { background: var(--pick-field); }
-.seg.field button { border-color: color-mix(in srgb, var(--pick-field) 35%, transparent); }
+/* 비교 기준(계약/매출): 이 탭의 모든 숫자를 바꾸므로 강조 띠 안에 크게 */
+.fieldbar { background: var(--field-bg); border: 1px solid var(--field-line); border-left: 5px solid var(--pick-field); border-radius: 10px; padding: 10px 16px; margin-bottom: 14px; }
+.fieldbar .label { color: var(--field-ink); font-weight: 700; font-size: 15px; }
+.seg.field button { font-size: 15px; padding: 8px 22px; font-weight: 600; border: 2px solid var(--pick-field); background: var(--surface); }
 .seg button:disabled { opacity: 0.35; cursor: default; }
 
 .warnings { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; }
