@@ -90,6 +90,9 @@ const disk = (m) => JSON.parse(fs.readFileSync(path.join(dir, 'months', `${m}.js
     const F2 = { ...locked1, contract: { ...locked1.contract, rows: [row('Z', '서울2감사', 2)], manual: [{ 사업부: '서울2감사', 계약구분: '기장', 계약: 9000000, 매출: 0, 메모: '' }] } };
     assert.equal(unlockRecord(F2).contract.manual[0].계약, 9000000, '지문이 다른 fileManual 은 무시');
     assert.equal(unlockRecord(locked1).contract.manual.length, 2, '같은 계약 자료면 되돌림');
+    // 계약 행은 같고 수기 행만 다른 새 파일을 예전 버전에서 올려 확정한 경우(manual 이 고정값과 다름)도 무시
+    const F3 = { ...locked1, contract: { ...locked1.contract, manual: [{ 사업부: '서울2감사', 계약구분: '기장', 계약: 9000000, 매출: 0, 메모: '' }] } };
+    assert.equal(unlockRecord(F3).contract.manual[0].계약, 9000000, '고정값이 바뀐 뒤의 fileManual 은 무시');
     const relock = lockRecord(cfgWith(G31), '2026-05', { ...F2, locked: false });
     assert.equal(unlockRecord(relock).contract.manual[0].계약, 9000000, '다시 확정하면 지금 파일 행으로 새로 보관');
     console.log('PASS');

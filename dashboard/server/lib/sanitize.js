@@ -59,7 +59,7 @@ function dataset(d) {
     if (d.gijangFixed === true && out.locked) out.gijangFixed = true; // 고정 표시는 확정 자료에만
     // 백업 복구: 확정 때 바꿔 끼운 파일의 수기 행(서버 보관용, 응답에는 실리지 않음)
     if (out.locked && d.fileManual && typeof d.fileManual === 'object' && Array.isArray(d.fileManual.rows)) {
-      out.fileManual = { key: str(d.fileManual.key, 64), rows: arr(d.fileManual.rows, 10000).map(manualRow) };
+      out.fileManual = { key: str(d.fileManual.key, 64), frozen: str(d.fileManual.frozen, 64), rows: arr(d.fileManual.rows, 10000).map(manualRow) };
     }
   } else {
     out.rows = d.rows.map((r) => row(r, A_STR, A_NUM));

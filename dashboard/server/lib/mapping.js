@@ -20,21 +20,24 @@ function frozenContract(cfg, m, contract) {
 // 화면 응답에도, 예전 버전으로 되돌렸을 때의 응답에도 실리지 않는다.
 // fileManual = { key: 그 계약 자료의 지문, rows: 파일의 수기 행 }. 지문이 지금 계약 자료와 다르면(그 사이 새 파일을 올렸거나
 // 예전 버전을 거쳐 온 경우) 다른 파일의 행이므로 쓰지 않는다. 지문은 백업·복구를 거쳐도 같도록 핵심 칸만으로 만든다.
-function contractKey(c) {
-  const rows = (c && c.rows || []).map((r) => [String(r.no ?? ''), String(r.사업부 ?? ''), String(r.계약구분 ?? ''), Number(r.계약) || 0, Number(r.매출) || 0]);
-  return crypto.createHash('sha256').update(JSON.stringify(rows)).digest('base64url').slice(0, 32);
-}
+// frozen = 확정 때 바꿔 끼운 manual 의 지문. 그 뒤 manual 이 바뀌었으면(예전 버전에서 다시 올리고 확정 등) 역시 쓰지 않는다.
+const hash = (v) => crypto.createHash('sha256').update(JSON.stringify(v)).digest('base64url').slice(0, 32);
+const contractKey = (c) => hash((c && c.rows || []).map((r) => [String(r.no ?? ''), String(r.사업부 ?? ''), String(r.계약구분 ?? ''), Number(r.계약) || 0, Number(r.매출) || 0]));
+const manualKey = (rows) => hash((rows || []).map((x) => [String(x.사업부 ?? ''), String(x.계약구분 ?? ''), Number(x.계약) || 0, Number(x.매출) || 0]));
 function fileManualOf(rec) {
   const f = rec && rec.fileManual;
-  return f && typeof f === 'object' && Array.isArray(f.rows) && rec.contract && f.key === contractKey(rec.contract) ? f : null;
+  return f && typeof f === 'object' && Array.isArray(f.rows) && rec.contract
+    && f.key === contractKey(rec.contract) && f.frozen === manualKey(rec.contract.manual) ? f : null;
 }
-const newFileManual = (contract) => ({ key: contractKey(contract), rows: contract.manual || [] });
+// before: 바꿔 끼우기 전 계약 자료(파일 행), after: 바꿔 끼운 뒤 manual
+const newFileManual = (before, after) => ({ key: contractKey(before), frozen: manualKey(after), rows: before.manual || [] });
 
 function lockRecord(cfg, m, rec, extra = {}) {
   const contract = frozenContract(cfg, m, rec.contract);
   const replaced = contract.manual !== rec.contract.manual;
   const { autoLockHold, fileManual, ...keep } = rec; // 확정하면 자동 확정 제외 표시는 지운다
-  const fm = replaced ? (fileManualOf(rec) || newFileManual(rec.contract)) : null;
+  const prev = fileManualOf(rec); // 같은 파일·같은 고정값이면 처음 파일 행을 계속 보관
+  const fm = replaced ? (prev ? { ...prev, frozen: manualKey(contract.manual) } : newFileManual(rec.contract, contract.manual)) : null;
   return { ...keep, contract, ...(fm ? { fileManual: fm } : {}), locked: true, mapping: effectiveMapping(cfg, m), ...extra };
 }
 // 확정 풀기: 고정 표시와 보고 당시 매핑을 지우고, 확정 때 바꿔 끼운 파일의 수기 행을(같은 계약 자료일 때만) 되돌린다.
@@ -64,7 +67,7 @@ function fixLegacyLocks(storage, { mode = '', backup = null } = {}) {
     const g = (cfg.gijang || []).filter((x) => x.month === m).map(({ month, ...rest }) => rest);
     if (!g.length || key(g) === key(rec.contract.manual)) plan.push([m, { ...rec, contract: { ...rec.contract, gijangFixed: true } }, 'same']);
     else if (mode === 'stored') plan.push([m, { ...rec, contract: { ...rec.contract, gijangFixed: true } }, 'stored']);
-    else if (mode === 'input') plan.push([m, { ...rec, contract: { ...rec.contract, manual: g, noId: g.length, gijangFixed: true }, fileManual: fileManualOf(rec) || newFileManual(rec.contract) }, 'input']);
+    else if (mode === 'input') plan.push([m, { ...rec, contract: { ...rec.contract, manual: g, noId: g.length, gijangFixed: true }, fileManual: fileManualOf(rec) ? { ...fileManualOf(rec), frozen: manualKey(g) } : newFileManual(rec.contract, g) }, 'input']);
     else pending.push(m);
   }
   const result = { backupFile: null, same: [], stored: [], input: [], pending };
