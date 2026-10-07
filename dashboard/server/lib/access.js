@@ -22,7 +22,8 @@ function filterFor(user, input, months) {
     contract: r.contract ? { fileName: r.contract.fileName, sheetName: r.contract.sheetName, rows: r.contract.rows.length } : null,
     ar: r.ar ? { fileName: r.ar.fileName, sheetName: r.ar.sheetName, rows: r.ar.rows.length } : null } : { month: m, locked: !!r.locked }));
   // 화면에 필요한 칸만 골라 보낸다(허용 목록). 저장 파일에 서버 보관용 칸(예: manualBeforeFix)이 더 있어도 나가지 않는다.
-  const pick = (d, m, locked, kind) => ({ kind, month: m, locked, fileName: d.fileName, sheetName: d.sheetName, rows: d.rows || [],
+  // 올린 파일·시트 이름은 관리자에게만(파일 이름에 다른 본부·고객 이름이 들어 있을 수 있다).
+  const pick = (d, m, locked, kind) => ({ kind, month: m, locked, fileName: user.admin ? d.fileName : '', sheetName: user.admin ? d.sheetName : '', rows: d.rows || [],
     ...(kind === 'contract' ? { asOf: d.asOf || null, manual: d.manual || [], noId: (d.manual || []).length, ...(d.gijangFixed ? { gijangFixed: true } : {}) } : {}) });
   const all = [];
   for (const [m, r] of Object.entries(months)) {
@@ -52,8 +53,15 @@ function filterFor(user, input, months) {
     if (d.manual) { out.manual = d.manual.filter(inScope(d.month)); out.noId = out.manual.length; } // 수기 행 수도 권한 범위 기준
     return out;
   });
-  const visibleNos = new Set();
-  datasets.forEach((d) => { if (d.kind === 'contract') d.rows.forEach((r) => visibleNos.add(r.no)); });
+  // 사유는 달마다 그 달(과 전월 대비의 '삭제' 행이 쓰는 전월)에 권한 범위로 보이는 계약번호만 보낸다.
+  // (같은 계약번호가 다른 달에는 다른 본부일 수 있으므로 모든 달을 합친 목록으로 거르면 안 된다)
+  const nosOf = new Map();
+  datasets.forEach((d) => { if (d.kind === 'contract') nosOf.set(d.month, new Set(d.rows.map((r) => r.no))); });
+  const prevMonth = (m) => { const [y, mo] = m.split('-').map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`; };
+  // 전월에만 보였던 계약은 그 달 전체 자료에 아예 없을 때(진짜 삭제)만 허용한다. 그 달 다른 본부로 옮겨 간 계약의 사유는 보내지 않는다.
+  const allNosOf = new Map();
+  all.forEach((d) => { if (d.kind === 'contract') allNosOf.set(d.month, new Set(d.rows.map((r) => r.no))); });
+  const visibleIn = (m) => (no) => nosOf.get(m)?.has(no) || (nosOf.get(prevMonth(m))?.has(no) && !allNosOf.get(m)?.has(no));
   const out = {
     company: cfg.company, fyStart: cfg.fyStart, unit: cfg.unit, catOrder: cfg.catOrder, catMap: cfg.catMap,
     buOrder: cfg.buOrder.filter((b) => allowed.has(b)),
@@ -65,7 +73,7 @@ function filterFor(user, input, months) {
     // 자금·예수금은 법인 전체 값이다. 입력용 '설정'에서 '전체권한자'로 정하면 전체 권한자에게만 보낸다.
     fund: cfg.fundScope === 'all-only' ? {} : cfg.fund, fundScope: cfg.fundScope,
     gijang: cfg.gijang.filter(inScope(null)),
-    reasons: Object.fromEntries(Object.entries(cfg.reasons).map(([m, list]) => [m, list.filter(([no]) => visibleNos.has(no))])),
+    reasons: Object.fromEntries(Object.entries(cfg.reasons).map(([m, list]) => [m, list.filter(([no]) => visibleIn(m)(no))])),
     access: [],
   };
   return { cfg: out, datasets, months: monthMeta };
