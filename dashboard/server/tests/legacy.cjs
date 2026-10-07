@@ -77,7 +77,7 @@ try {
     const bk = JSON.parse(fs.readFileSync(r2.backupFile, 'utf8'));
     assert.equal(bk.months['2025-08'].contract.manual[0].계약, 10000000, 'A input: 바꾸기 전 값이 백업에 있음');
     const rec = store.load().months['2025-08'].contract;
-    assert.ok(rec.gijangFixed && rec.manual[0].계약 === 50000000 && rec.manualBeforeFix[0].계약 === 10000000, 'A input: 원래 값은 manualBeforeFix 에 보관');
+    assert.ok(rec.gijangFixed && rec.manual[0].계약 === 50000000 && store.load().months['2025-08'].fileManual[0].계약 === 10000000, 'A input: 원래 파일 행은 월 기록의 fileManual(contract 밖)에 보관');
     assert.deepEqual(fixLegacyLocks(createStorage(dir), { mode: 'input' }).input, [], '재시작 후에는 할 일 없음');
     // 예전 버전 화면 값(백만원). 보고 당시 기준 25.08월은 확정 때 저장한 매핑(서울2감사 → 1본부)을 쓴다.
     const aug = { current: [350, 200, 0, 150, 700], reported: [550, 0, 0, 150, 700] };
@@ -91,12 +91,12 @@ try {
     assert.equal(view(store, { admin: false, all: false, bus: ['6팀', '2본부'] }).metric('2025-08', '전체').계약, 350, '본부 권한자: 2본부+6팀');
     assert.equal(view(store, { admin: false, all: true, bus: [] }).metric('2025-08', '전체').계약, 700, '전체 조회자');
 
-    // 서버 보관용 칸(manualBeforeFix)과 다른 본부 자료는 /api/data 응답에 실리지 않는다
+    // 서버 보관용 칸(fileManual 등)과 다른 본부 자료는 /api/data 응답에 실리지 않는다
     const KEYS = new Set(['kind', 'month', 'locked', 'fileName', 'sheetName', 'rows', 'asOf', 'manual', 'noId', 'gijangFixed', 'mapping']);
     for (const u of [admin, { admin: false, all: true, bus: [] }, { admin: false, all: false, bus: ['2본부'] }]) {
       const p = filterFor(u, store.load().input, store.load().months);
       for (const d of p.datasets) for (const k of Object.keys(d)) assert.ok(KEYS.has(k), `응답에 허용되지 않은 칸: ${k}`);
-      assert.ok(!JSON.stringify(p).includes('manualBeforeFix'), 'manualBeforeFix 는 누구에게도 보내지 않음');
+      assert.ok(!JSON.stringify(p).includes('fileManual'), 'fileManual 은 누구에게도 보내지 않음');
     }
     const p2 = filterFor({ admin: false, all: false, bus: ['2본부'] }, store.load().input, store.load().months);
     const body = JSON.stringify(p2);

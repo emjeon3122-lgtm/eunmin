@@ -48,9 +48,15 @@ function filterFor(user, input, months) {
   const pickBus = (o) => Object.fromEntries(Object.entries(o || {}).filter(([bu]) => allowed.has(bu)));
   const byMonth = (o) => Object.fromEntries(Object.entries(o || {}).map(([m, v]) => [m, pickBus(v)]));
 
+  // 입력용 기장추가가 있는 달은(고정한 확정월 제외) 화면이 파일의 수기 행 대신 기장추가를 쓴다. 다른 본부 기장추가만 있어서
+  // 이 사용자에게 0줄이 가더라도 같은 규칙이 되도록, 그 달 파일 수기 행은 보내지 않는다(관리자 화면과 같은 숫자).
+  const gijangMonths = new Set(cfg.gijang.map((g) => g.month));
   const datasets = noSnap(all).map((d) => {
     const out = { ...d, rows: d.rows.filter(inScope(d.month)) };
-    if (d.manual) { out.manual = d.manual.filter(inScope(d.month)); out.noId = out.manual.length; } // 수기 행 수도 권한 범위 기준
+    if (d.manual) {
+      const useInput = !(d.locked && d.gijangFixed) && gijangMonths.has(d.month);
+      out.manual = useInput ? [] : d.manual.filter(inScope(d.month)); out.noId = out.manual.length; // 수기 행 수도 권한 범위 기준
+    }
     return out;
   });
   // 사유는 달마다 그 달(과 전월 대비의 '삭제' 행이 쓰는 전월)에 권한 범위로 보이는 계약번호만 보낸다.

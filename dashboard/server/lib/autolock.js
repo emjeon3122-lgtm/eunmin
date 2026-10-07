@@ -2,7 +2,7 @@
 // - 계약·매출 자료가 있는 달만 확정한다(자료가 없으면 건너뛰고 다음 확인 때 다시 본다).
 // - 관리자가 '확정 풀기'한 달(autoLockHold)은 자동으로 다시 확정하지 않는다(관리자가 직접 확정하면 해제).
 'use strict';
-const { effectiveMapping, frozenContract } = require('./mapping');
+const { lockRecord } = require('./mapping');
 
 const BY = '자동 확정';
 
@@ -20,7 +20,7 @@ function autoLock(storage, now = new Date()) {
   const locked = [];
   for (const [m, rec] of Object.entries(months)) {
     if (m > upto || !rec.contract || rec.locked || rec.autoLockHold) continue;
-    storage.saveMonth(m, { ...rec, contract: frozenContract(input.cfg, m, rec.contract), locked: true, mapping: effectiveMapping(input.cfg, m), updatedAt: now.toISOString(), by: BY });
+    storage.saveMonth(m, lockRecord(input.cfg, m, rec, { updatedAt: now.toISOString(), by: BY }));
     locked.push(m);
   }
   if (locked.length) storage.audit({ by: BY, action: 'lock', upto, locked });

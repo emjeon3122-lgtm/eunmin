@@ -21,7 +21,7 @@ const cfg = config({
 });
 const months = {
   '2026-03': { locked: true, contract: contract('ERP_B본부_대외비(26.03).xlsx', [row('C1', 'S', 10), row('C9', 'S', 3), row('T1', 'T', 7)],
-    { manual: [{ 사업부: 'T', 계약구분: '기장', 계약: 9, 매출: 9, 메모: '' }], manualBeforeFix: [{ 사업부: 'T', 계약: 99 }], gijangFixed: true }), mapping: { bu: [], cat: [], at: 'x' } },
+    { manual: [{ 사업부: 'T', 계약구분: '기장', 계약: 9, 매출: 9, 메모: '' }], manualBeforeFix: [{ 사업부: 'T', 계약: 99 }], gijangFixed: true }), fileManual: [{ 사업부: 'T', 계약: 98 }], mapping: { bu: [], cat: [], at: 'x' } },
   '2026-04': { locked: false, contract: contract('ERP(26.04).xlsx', [row('C1', 'S', 11)]) }, // C9 삭제, C1 은 이달부터 B
   '2026-05': { locked: false, contract: contract('ERP(26.05).xlsx', [row('C1', 'S', 12, 'B 파일 사유')]) },
 };
@@ -32,7 +32,7 @@ for (const user of [{ admin: true, all: true, bus: [] }, { admin: false, all: tr
   const p = filterFor(user, input, months);
   const body = JSON.stringify(p);
   for (const d of p.datasets) for (const k of Object.keys(d)) assert.ok(ALLOWED.has(k), `허용되지 않은 칸 ${k}`);
-  assert.ok(!body.includes('manualBeforeFix'), '서버 보관용 칸은 누구에게도 보내지 않음');
+  assert.ok(!body.includes('manualBeforeFix') && !body.includes('fileManual'), '서버 보관용 칸은 누구에게도 보내지 않음');
   assert.equal(body.includes('대외비'), user.admin, '올린 파일 이름은 관리자에게만');
   assert.equal(p.datasets.some((d) => d.mapping), user.admin, '확정 때 매핑은 관리자에게만');
 }

@@ -13,7 +13,7 @@ const { resolveUser, filterFor } = require('./lib/access');
 const auth = require('./lib/auth');
 const { buildBackup, scheduleBackups, writeBackupNow } = require('./lib/backup');
 const { scheduleAutoLock } = require('./lib/autolock');
-const { effectiveMapping, frozenContract, fixLegacyLocks } = require('./lib/mapping');
+const { lockRecord, unlockRecord, fixLegacyLocks } = require('./lib/mapping');
 
 // ---- 설정 -------------------------------------------------------------------
 const env = process.env;
@@ -179,6 +179,7 @@ const adminRoutes = {
       if (rec.locked && !d.locked) { skipped.push({ month: d.month, kind: d.kind, fileName: d.fileName, why: 'locked' }); continue; }
       const { kind, month, locked, mapping, autoLockHold, ...rest } = d;
       rec[kind] = rest;
+      if (kind === 'contract') delete rec.fileManual; // 새로 올린 계약 자료가 예전 파일 수기 행을 대신한다
       // 마감자료·백업에서 온 확정 자료는 그때 저장한 보고 당시 매핑을 그대로 쓴다.
       if (locked) { rec.locked = true; if (kind === 'contract' && mapping) rec.mapping = mapping; }
       else if (autoLockHold) rec.autoLockHold = true; // 백업 복구: 관리자가 직접 푼 달은 자동 확정에서 계속 제외
@@ -196,8 +197,7 @@ const adminRoutes = {
     for (const [m, rec] of Object.entries(months)) {
       // 확정하는 순간의 본부·중분류 매핑을 '보고 당시 기준'으로 함께 저장한다.
       if (m <= body.upto && rec.contract && !rec.locked) {
-        const { autoLockHold, ...keep } = rec; // 직접 확정하면 자동 확정 제외 표시도 지운다
-        storage.saveMonth(m, stamp({ ...keep, contract: frozenContract(input.cfg, m, keep.contract), locked: true, mapping: effectiveMapping(input.cfg, m) }, user)); locked.push(m);
+        storage.saveMonth(m, stamp(lockRecord(input.cfg, m, rec), user)); locked.push(m); // 직접 확정하면 자동 확정 제외 표시도 지운다
       }
     }
     storage.audit({ by: user.email, action: 'lock', upto: body.upto, locked });
@@ -205,9 +205,9 @@ const adminRoutes = {
   },
   async unlock(body, user) {
     if (!sanitize.isMonth(body.month) || !storage.load().months[body.month]) throw Object.assign(new Error('없는 월입니다.'), { status: 404 });
-    const { mapping, ...rest } = monthRecord(body.month); // 확정을 풀면 보고 당시 매핑도 지운다(다시 확정할 때 새로 저장)
+    // 확정을 풀면 보고 당시 매핑·기장 고정 표시를 지우고 확정 때 바꿔 끼운 파일의 수기 행을 되돌린다(lib/mapping.js unlockRecord).
     // 직접 푼 달은 고치는 중일 수 있으므로 자동 확정이 다시 잠그지 않는다(관리자가 직접 확정하면 해제).
-    storage.saveMonth(body.month, stamp({ ...rest, locked: false, autoLockHold: true }, user));
+    storage.saveMonth(body.month, stamp(unlockRecord(monthRecord(body.month), { autoLockHold: true }), user));
     storage.audit({ by: user.email, action: 'unlock', month: body.month });
     return { ok: true };
   },
