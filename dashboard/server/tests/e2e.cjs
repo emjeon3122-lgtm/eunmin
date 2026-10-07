@@ -84,6 +84,11 @@ function startIdp(port, clientId) {
   let ok = 0;
   // 1) 임시 관리자 로그인 + 업로드
   let srv = await startServer(18080, { AUTH_MODE: 'local', LOCAL_ADMIN_PASSWORD_HASH: hashPassword(PASSWORD) });
+  { // 상태 확인: 본문은 정확히 'ok', 버전은 머리글
+    const h = await fetch('http://127.0.0.1:18080/healthz');
+    assert.equal(await h.text(), 'ok');
+    assert.equal(h.headers.get('x-dashboard-version'), fs.readFileSync(path.join(__dirname, '..', 'VERSION'), 'utf8').trim());
+  }
   let page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errs = []; page.on('pageerror', (e) => errs.push(e.message));
   await page.goto('http://127.0.0.1:18080/');

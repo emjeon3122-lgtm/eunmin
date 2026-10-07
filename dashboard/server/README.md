@@ -28,7 +28,7 @@ PC용 `실적대시보드.html` 과 같은 화면을 회사 NAS 에서 제공합
 1. 이 폴더를 NAS 에 복사한다(예: `/volume1/docker/silgeok-dashboard`).
 2. `.env.example` 을 `.env` 로 복사하고 값을 채운다(아래 변수 표). `.env` 는 공유하지 않는다.
 3. Container Manager › 프로젝트 › 생성 › 이 폴더 선택(`docker-compose.yml`) → 빌드·실행.
-4. NAS 에서 `curl http://127.0.0.1:7020/healthz` 가 `ok` 이면 정상.
+4. NAS 에서 `curl http://127.0.0.1:7020/healthz` 가 `ok` 이면 정상(버전은 응답 머리글 `X-Dashboard-Version`).
 5. DSM › 제어판 › 로그인 포털 › 고급 › 역방향 프록시:
    원본 `HTTPS` `*` `7021` → 대상 `HTTP` `localhost` `7020`.
    사용자 지정 머리글에 `X-Forwarded-For`(`$proxy_add_x_forwarded_for`)를 추가하면 접속 기록에 사용자 IP 가 남는다.

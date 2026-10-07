@@ -323,17 +323,18 @@ const Model = (() => {
     };
     const catOf = (s, m) => { const sp = snapOf(m); return (sp ? sp.cat.get(norm(s)) : cfg.catMap.get(norm(s))) || UNMAPPED; };
 
-    // 기장 수기분: 입력용 '기장추가'에 그 달이 있으면 그 값, 없으면 올린 파일의 수기 행(계약번호 없는 행)을 쓴다.
-    // 기장 수기분: 확정한 달은 확정할 때 고정한 수기 행, 아니면 입력용 '기장추가'에 그 달이 있으면 그 값, 없으면 파일의 수기 행.
+    // 기장 수기분: 확정할 때 고정한 달(gijangFixed)은 그 수기 행, 아니면 입력용 '기장추가'에 그 달이 있으면 그 값,
+    // 없으면 올린 파일의 수기 행(계약번호 없는 행). 예전 버전에서 확정해 고정 표시가 없는 달은 예전처럼 계산한다.
+    const fixedG = (d) => d?.locked && d.gijangFixed;
     const gijangFor = (m) => {
       const d = contracts.get(m);
-      const g = d?.locked ? [] : cfg.gijang.filter((x) => x.month === m);
+      const g = fixedG(d) ? [] : cfg.gijang.filter((x) => x.month === m);
       return g.length ? g : (d?.manual || []).map((x) => ({ ...x, month: m }));
     };
     const gijangSource = (m) => {
       const d = contracts.get(m);
-      if (!d?.locked && cfg.gijang.some((x) => x.month === m)) return '입력용 기장추가';
-      return d?.manual?.length ? (d.locked ? '확정 때 고정한 수기 행' : '파일의 수기 행') : '';
+      if (!fixedG(d) && cfg.gijang.some((x) => x.month === m)) return '입력용 기장추가';
+      return d?.manual?.length ? (fixedG(d) ? '확정 때 고정한 수기 행' : '파일의 수기 행') : '';
     };
     const unmappedBu = new Map();
     const unmappedCat = new Map();
@@ -613,6 +614,7 @@ const Model = (() => {
     const pairs = (v) => (Array.isArray(v) ? v.filter((x) => Array.isArray(x) && x.length === 2) : []);
     return { company: '', fyStart: 4, unit: 1000000, catOrder: [], buOrder: [], orgRules: [], plansReported: {}, plans: {}, people: {}, fund: {},
       prev: {}, arManual: {}, gijang: [], access: [], problems: [], ...p,
+      orgRules: Org.rulesOf(p), // 예전 버전의 buMap 형식이면 이력 규칙으로 바꾼다
       catMap: new Map(pairs(p.catMap)),
       reasons: Object.fromEntries(Object.entries(p.reasons || {}).map(([m, v]) => [m, new Map(pairs(v))])) };
   }
@@ -634,13 +636,13 @@ const Model = (() => {
   // (server/lib/mapping.js frozenContract 와 같은 규칙)
   function frozenContract(cfg, m, d) {
     const g = (cfg.gijang || []).filter((x) => x.month === m).map(({ month, ...rest }) => rest);
-    return g.length ? { ...d, manual: g, noId: g.length } : d;
+    return { ...d, ...(g.length ? { manual: g, noId: g.length } : {}), gijangFixed: true };
   }
   function exportSnapshot(datasets, upto, cfg) {
     const { contracts, ars } = pickActive(datasets);
     const months = {};
     const pack = (d, fields) => ({ fileName: d.fileName, sheetName: d.sheetName, asOf: d.asOf || null, noId: d.noId || 0,
-      fields, rows: d.rows.map((r) => fields.map((f) => r[f] ?? null)), manual: d.manual || [] });
+      fields, rows: d.rows.map((r) => fields.map((f) => r[f] ?? null)), manual: d.manual || [], ...(d.gijangFixed ? { gijangFixed: true } : {}) });
     for (const [m, d] of contracts) {
       if (m > upto) continue;
       const mapping = d.mapping || (cfg ? effectiveMapping(cfg, m) : null);
@@ -673,7 +675,8 @@ const Model = (() => {
       const pairs = (x) => (Array.isArray(x) ? x.filter((p) => Array.isArray(p) && p.length === 2).map(([a, b]) => [text(a), text(b)]) : []);
       const mapping = mp && typeof mp === 'object' && Array.isArray(mp.bu) ? { bu: pairs(mp.bu), cat: pairs(mp.cat), at: text(mp.at) } : null;
       if (c) out.push({ kind: 'contract', fileName, sheetName: `마감 ${monthLabel(m)} (${text(v.contract.fileName)})`, rows: c, month: m,
-        asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: v.locked !== false, ...(v.autoLockHold === true ? { autoLockHold: true } : {}), ...(mapping ? { mapping } : {}) });
+        asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: v.locked !== false, ...(v.autoLockHold === true ? { autoLockHold: true } : {}),
+        ...(v.contract.gijangFixed === true ? { gijangFixed: true } : {}), ...(mapping ? { mapping } : {}) });
       const a = unpack(v.ar, A_FIELDS);
       if (a) out.push({ kind: 'ar', fileName, sheetName: `마감 ${monthLabel(m)} 미수금`, rows: a, month: m, locked: v.locked !== false });
     }

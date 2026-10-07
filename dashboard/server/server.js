@@ -13,7 +13,7 @@ const { resolveUser, filterFor } = require('./lib/access');
 const auth = require('./lib/auth');
 const { buildBackup, scheduleBackups } = require('./lib/backup');
 const { scheduleAutoLock } = require('./lib/autolock');
-const { effectiveMapping, frozenContract } = require('./lib/mapping');
+const { effectiveMapping, frozenContract, fixLegacyLocks } = require('./lib/mapping');
 
 // ---- 설정 -------------------------------------------------------------------
 const env = process.env;
@@ -81,7 +81,7 @@ function send(req, res, status, body, type) {
 const dataCache = new Map(); let dataCacheVersion = -1;
 function dataPayload(user) {
   if (dataCacheVersion !== storage.version) { dataCache.clear(); dataCacheVersion = storage.version; }
-  const key = user.admin ? 'admin' : user.all ? 'all' : `bu:${[...user.bus].sort().join('|')}`;
+  const key = user.admin ? 'admin' : user.all ? 'all' : `bu:${JSON.stringify([...new Set(user.bus)].sort())}`; // 본부 이름에 어떤 글자가 있어도 겹치지 않게
   if (!dataCache.has(key)) {
     const { input, months } = storage.load();
     const p = gzip(Buffer.from(JSON.stringify(filterFor(user, input, months))));
@@ -225,7 +225,8 @@ async function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   const route = `${req.method} ${url.pathname}`;
 
-  if (route === 'GET /healthz') return send(req, res, 200, `ok ${VERSION}`, 'text/plain');
+  // 상태 확인: 본문은 'ok' 만(배포 도구가 그대로 비교), 버전은 X-Dashboard-Version 머리글로 알려 준다.
+  if (route === 'GET /healthz') { res.setHeader('X-Dashboard-Version', VERSION); return send(req, res, 200, 'ok', 'text/plain'); }
 
   // 로그인
   if (route === 'GET /auth/login') {
@@ -319,5 +320,6 @@ const server = http.createServer((req, res) => {
 });
 server.requestTimeout = 5 * 60 * 1000;
 scheduleBackups({ ...config.backup, dir: config.backup.dir || path.join(config.dataDir, 'backups'), load: storage.load, log: (m) => console.log(m) });
+{ const fixed = fixLegacyLocks(storage); if (fixed.length) console.log(`예전 버전 확정월의 기장 수기분 고정: ${fixed.join(', ')}`); }
 scheduleAutoLock({ storage, log: (m) => console.log(m) });
 server.listen(config.port, config.host, () => console.log(`실적 대시보드 서버 ${VERSION}: http://${config.host}:${config.port} (로그인 방식: ${config.authMode})`));

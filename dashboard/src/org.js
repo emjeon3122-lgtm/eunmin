@@ -45,5 +45,37 @@
     };
   }
 
-  return { compile, norm };
+  // 예전 버전(2026.10.02-2 이전)의 본부매핑 저장 형식을 이력 규칙으로 바꾼다.
+  //   buMap: [[사업부, 본부]] 공통 매핑, buMapFy: [[회계연도, 사업부, 본부]] 그 회계연도 전용(현재 조직 기준에도 썼음),
+  //   buMapReported: [[회계연도, 사업부, 본부]] 보고 당시 기준 전용.
+  // 예전 화면과 같은 본부가 나오도록 회계연도마다 [사업부, 그 해 시작월, 보고 당시 본부, 현재 기준 본부] 줄을 만든다.
+  function fromLegacy(cfg) {
+    const fyStart = Number(cfg.fyStart) >= 1 && Number(cfg.fyStart) <= 12 ? Number(cfg.fyStart) : 4;
+    const pairs = (v) => (Array.isArray(v) ? v.filter((x) => Array.isArray(x) && x.length === 2 && x[0] && x[1]).map(([k, b]) => [norm(k), String(b)]) : []);
+    const triples = (v) => (Array.isArray(v) ? v.filter((x) => Array.isArray(x) && x.length === 3 && Number.isInteger(Number(x[0])) && x[1] && x[2])
+      .map(([f, k, b]) => [Number(f), norm(k), String(b)]) : []);
+    const base = new Map(pairs(cfg.buMap));
+    const fyCur = triples(cfg.buMapFy); const fyRep = triples(cfg.buMapReported);
+    const start = (fy) => `${fy}-${String(fyStart).padStart(2, '0')}`;
+    const rules = [];
+    for (const s of new Set([...base.keys(), ...fyCur.map((t) => t[1]), ...fyRep.map((t) => t[1])])) {
+      const cur = new Map(fyCur.filter((t) => t[1] === s).map(([f, , b]) => [f, b]));
+      const rep = new Map(fyRep.filter((t) => t[1] === s).map(([f, , b]) => [f, b]));
+      const b0 = base.get(s);
+      if (!cur.size && !rep.size) { rules.push([s, null, b0, null]); continue; }
+      if (b0) rules.push([s, null, b0, b0]);
+      const fys = [...new Set([...cur.keys(), ...rep.keys()])].sort((x, y) => x - y);
+      for (const fy of fys) {
+        const c = cur.get(fy) || b0 || rep.get(fy);
+        rules.push([s, start(fy), rep.get(fy) || c, c]);
+        // 전용 매핑이 없는 다음 해부터는 공통 매핑으로 돌아간다.
+        if (b0 && !fys.includes(fy + 1)) rules.push([s, start(fy + 1), b0, b0]);
+      }
+    }
+    return rules;
+  }
+  // 설정에 이력(orgRules)이 없고 예전 형식만 있으면 바꿔서 쓴다.
+  const rulesOf = (cfg) => (Array.isArray(cfg?.orgRules) ? cfg.orgRules : cfg && (cfg.buMap || cfg.buMapFy) ? fromLegacy(cfg) : []);
+
+  return { compile, norm, fromLegacy, rulesOf };
 }));

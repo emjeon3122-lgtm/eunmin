@@ -40,6 +40,7 @@ function cookie(name, value, { maxAge, secure, sameSite = 'Lax', path = '/' } = 
 
 // 세션은 SESSION_SECRET 으로 암호화한 쿠키에 담는다(AES-256-GCM). 서버를 다시 켜도 로그인이 유지된다.
 // 로그아웃한 세션은 만료 전까지 폐기 목록으로 막는다. revokedFile 을 주면 서버를 다시 켜도 목록이 유지된다.
+const TOKEN_RE = /^[A-Za-z0-9_-]+$/;
 function createSessions(ttlHours, secret, { revokedFile = '' } = {}) {
   if (!secret || String(secret).length < 32) throw new Error('SESSION_SECRET 은 32자 이상이어야 합니다 (예: openssl rand -base64 48).');
   const key = crypto.createHash('sha256').update(String(secret)).digest();
@@ -65,9 +66,12 @@ function createSessions(ttlHours, secret, { revokedFile = '' } = {}) {
       return b64url(Buffer.concat([iv, body, c.getAuthTag()]));
     },
     get(token) {
-      if (!token || typeof token !== 'string' || token.length > 4096 || revoked.has(hashOf(token))) return null;
+      // 우리가 만든 모양(base64url, 덧붙임 '=' 없음)만 받는다. 같은 내용을 다르게 적은 토큰(끝에 '=' 등)으로
+      // 폐기 목록을 피하지 못하도록, 다시 인코딩한 값이 원래 토큰과 똑같은지도 확인한다.
+      if (!token || typeof token !== 'string' || token.length > 4096 || !TOKEN_RE.test(token)) return null;
+      const raw = Buffer.from(token, 'base64url');
+      if (raw.length < 12 + 16 + 1 || b64url(raw) !== token || revoked.has(hashOf(token))) return null;
       try {
-        const raw = Buffer.from(token, 'base64url');
         const d = crypto.createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12));
         d.setAuthTag(raw.subarray(raw.length - 16));
         const s = JSON.parse(Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]).toString('utf8'));

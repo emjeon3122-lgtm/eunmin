@@ -1,6 +1,7 @@
 // 브라우저에서 올라온 자료를 저장하기 전에 모양과 값을 검사한다.
 // 값은 문자열·숫자·불리언으로만 받아들이고, 위험한 객체 키(__proto__ 등)는 버린다.
 'use strict';
+const Org = require('./org');
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -55,6 +56,7 @@ function dataset(d) {
     out.asOf = typeof d.asOf === 'string' && DATE_RE.test(d.asOf) ? d.asOf : null;
     if (d.mapping && typeof d.mapping === 'object') out.mapping = mapping(d.mapping);
     if (d.autoLockHold === true && !out.locked) out.autoLockHold = true;
+    if (d.gijangFixed === true) out.gijangFixed = true;
   } else {
     out.rows = d.rows.map((r) => row(r, A_STR, A_NUM));
   }
@@ -75,8 +77,8 @@ function config(p) {
     catOrder: arr(p.catOrder, 100).map((x) => str(x, 100)),
     buOrder: arr(p.buOrder, 200).map((x) => str(x, 100)),
     plans: obj(p.plans, (k) => k === '*' || /^\d{4}$/.test(k), (v) => obj(v, anyKey, num)),
-    // 본부매핑 이력: [사업부, 적용시작월|null, 본부(당시), 현재 본부|null]
-    orgRules: arr(p.orgRules, 10000).filter((t) => Array.isArray(t) && t.length === 4)
+    // 본부매핑 이력: [사업부, 적용시작월|null, 본부(당시), 현재 본부|null] (예전 buMap 형식이면 바꿔서 받는다)
+    orgRules: arr(Org.rulesOf(p), 10000).filter((t) => Array.isArray(t) && t.length === 4)
       .map(([s, from, bu, cur]) => [str(s, 300), isMonth(from) ? from : null, str(bu, 100), cur ? str(cur, 100) : null]).filter((t) => t[0] && t[2]),
     plansReported: obj(p.plansReported, (k) => k === '*' || /^\d{4}$/.test(k), (v) => obj(v, anyKey, num)),
     catMap: pairs(p.catMap),

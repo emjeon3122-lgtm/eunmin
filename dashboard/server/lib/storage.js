@@ -6,7 +6,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { isMonth } = require('./sanitize');
+const { isMonth, config } = require('./sanitize');
 
 function createStorage(dataDir) {
   const monthsDir = path.join(dataDir, 'months');
@@ -34,7 +34,9 @@ function createStorage(dataDir) {
       const m = f.replace(/\.json$/, '');
       if (f.endsWith('.json') && isMonth(m)) months[m] = readJson(path.join(monthsDir, f), null);
     }
-    cache = { input: readJson(path.join(dataDir, 'input.json'), null), months };
+    // 예전 버전이 저장한 설정(본부매핑 buMap 형식, 빠진 항목)도 지금 형식으로 맞춰 읽는다. 파일은 그대로 둔다.
+    const input = readJson(path.join(dataDir, 'input.json'), null);
+    cache = { input: input && input.cfg ? { ...input, cfg: config(input.cfg) } : input, months };
     return cache;
   }
 
