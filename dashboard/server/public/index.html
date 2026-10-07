@@ -209,7 +209,7 @@ section.block h3 { font-size: 15px; margin: 0 0 8px; }
 <body>
 <div class="wrap" id="app"></div>
 <script>
-const DASHBOARD_VERSION = '2026.10.06-7';
+const DASHBOARD_VERSION = '2026.10.06-8';
 const DASHBOARD_MODE = 'server';
 </script>
 <script>
@@ -615,24 +615,29 @@ const Model = (() => {
       return m;
     };
     const put = (obj, m, bu, val) => { (obj[m] ||= {})[bu] = val; };
+    // 값 칸이 모두 빈 줄은 건너뛴다(아래쪽에 월만 복사해 둔 빈 줄이 위의 실제 값을 덮어쓰지 않게).
+    const blank = (o) => Object.values(o).every((v) => v === null);
     for (const r of await t('인원', ['월', '본부', ...PEOPLE])) {
       const m = monthOf(r, '인원'); if (!m) continue;
-      put(cfg.people, m, text(r.get('본부')), Object.fromEntries(PEOPLE.map((p) => [p, numOrNull(r.get(p))])));
+      const o = Object.fromEntries(PEOPLE.map((p) => [p, numOrNull(r.get(p))]));
+      if (!blank(o)) put(cfg.people, m, text(r.get('본부')), o);
     }
     for (const r of await t('자금', ['월', '자금', '예수금'])) {
       const m = monthOf(r, '자금'); if (!m) continue;
-      cfg.fund[m] = { 자금: numOrNull(r.get('자금')), 예수금: numOrNull(r.get('예수금')),
+      const o = { 자금: numOrNull(r.get('자금')), 예수금: numOrNull(r.get('예수금')),
         전년자금: numOrNull(r.get('전년자금')), 전년예수금: numOrNull(r.get('전년예수금')) };
+      if (!blank(o)) cfg.fund[m] = o;
     }
     for (const r of await t('전년실적', ['월', '본부', '계약', '매출'])) {
       const m = monthOf(r, '전년실적'); if (!m) continue;
       const o = { 계약: numOrNull(r.get('계약')), 매출: numOrNull(r.get('매출')), 미수금: numOrNull(r.get('미수금')) };
       PEOPLE.forEach((p) => { o[p] = numOrNull(r.get(p)); });
-      put(cfg.prev, m, text(r.get('본부')), o);
+      if (!blank(o)) put(cfg.prev, m, text(r.get('본부')), o);
     }
     for (const r of await t('미수금', ['월', '본부', '미수금'])) {
       const m = monthOf(r, '미수금'); if (!m) continue;
-      put(cfg.arManual, m, text(r.get('본부')), numOrNull(r.get('미수금')));
+      const v = numOrNull(r.get('미수금'));
+      if (v !== null) put(cfg.arManual, m, text(r.get('본부')), v);
     }
     for (const r of await t('기장추가', ['월', '사업부', '계약금액'])) {
       const m = monthOf(r, '기장추가'); if (!m) continue;
