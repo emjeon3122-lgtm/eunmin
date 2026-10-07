@@ -67,7 +67,8 @@ function filterFor(user, input, months) {
   // 전월에만 보였던 계약은 그 달 전체 자료에 아예 없을 때(진짜 삭제)만 허용한다. 그 달 다른 본부로 옮겨 간 계약의 사유는 보내지 않는다.
   const allNosOf = new Map();
   all.forEach((d) => { if (d.kind === 'contract') allNosOf.set(d.month, new Set(d.rows.map((r) => r.no))); });
-  const visibleIn = (m) => (no) => nosOf.get(m)?.has(no) || (nosOf.get(prevMonth(m))?.has(no) && !allNosOf.get(m)?.has(no));
+  // 그 달 계약 자료가 아직 없으면(파일 올리기 전) 전월 계약의 사유도 보내지 않는다(어느 본부로 갈지 모름. 화면도 그 달은 비어 있음).
+  const visibleIn = (m) => (no) => nosOf.get(m)?.has(no) || (allNosOf.has(m) && nosOf.get(prevMonth(m))?.has(no) && !allNosOf.get(m).has(no));
   const out = {
     company: cfg.company, fyStart: cfg.fyStart, unit: cfg.unit, catOrder: cfg.catOrder, catMap: cfg.catMap,
     buOrder: cfg.buOrder.filter((b) => allowed.has(b)),

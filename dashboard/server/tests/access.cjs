@@ -16,6 +16,7 @@ const cfg = config({
     '2026-03': [['C1', 'A 사유'], ['T1', 'B 사유 T1']],
     '2026-04': [['C9', 'A 삭제 사유'], ['C1', 'B 사유 C1(4월)']],
     '2026-05': [['C1', 'B 비밀 사유']],
+    '2026-06': [['C1', 'B 미리 적은 사유']], // 26.06월 파일은 아직 없음
   },
   access: [],
 });
@@ -39,9 +40,9 @@ for (const user of [{ admin: true, all: true, bus: [] }, { admin: false, all: tr
 
 const a = filterFor({ admin: false, all: false, bus: ['A'] }, input, months);
 const body = JSON.stringify(a);
-for (const secret of ['T1', '고객T1', 'B 사유 T1', 'B 사유 C1(4월)', 'B 비밀 사유', 'B 파일 사유', 'B기장']) assert.ok(!body.includes(secret), `A본부 사용자에게 B본부 자료 없음: ${secret}`);
+for (const secret of ['T1', '고객T1', 'B 사유 T1', 'B 사유 C1(4월)', 'B 비밀 사유', 'B 파일 사유', 'B기장', 'B 미리 적은 사유']) assert.ok(!body.includes(secret), `A본부 사용자에게 B본부 자료 없음: ${secret}`);
 assert.deepEqual(a.datasets.filter((d) => d.rows.length).map((d) => [d.month, d.rows.map((r) => r.no)]), [['2026-03', ['C1', 'C9']]], '26.03월 S(A본부) 행만');
-assert.deepEqual(a.cfg.reasons, { '2026-03': [['C1', 'A 사유']], '2026-04': [['C9', 'A 삭제 사유']], '2026-05': [] }, '사유는 달마다 보이는 계약만(전월 대비 삭제 행 포함)');
+assert.deepEqual(a.cfg.reasons, { '2026-03': [['C1', 'A 사유']], '2026-04': [['C9', 'A 삭제 사유']], '2026-05': [], '2026-06': [] }, '사유는 달마다 보이는 계약만(전월 대비 삭제 행 포함)');
 assert.ok(a.datasets.every((d) => d.kind !== 'contract' || d.manual.every((x) => x.사업부 !== 'T')) && a.datasets[0].noId === 0, '다른 본부 수기 행·건수 없음');
 assert.deepEqual(a.cfg.plans, { '*': { A: 1 } });
 console.log('PASS');
