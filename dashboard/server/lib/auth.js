@@ -29,7 +29,9 @@ function parseCookies(header) {
   const out = {};
   for (const part of String(header || '').split(';')) {
     const i = part.indexOf('=');
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i <= 0) continue;
+    // 같은 주소의 다른 서비스가 심은 깨진 쿠키(예: '%') 하나 때문에 모든 요청이 오류가 나지 않게 건너뛴다.
+    try { out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } catch { /* 무시 */ }
   }
   return out;
 }
@@ -111,11 +113,30 @@ function createLimiter({ max = 10, globalMax = 100, windowMs = 15 * 60 * 1000, m
 }
 
 // ---- OIDC (Authorization Code + PKCE) ---------------------------------------
-const MAX_PENDING_LOGINS = 5000;
-function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, allowedDomains = [], fetchImpl = fetch }) {
+// 진행 중인 로그인(state·nonce·PKCE verifier)은 서버 메모리에 두지 않고 암호화해 oidc_state 쿠키에 담는다.
+// (로그인 화면을 대량으로 여는 요청이 다른 사람의 진행 중인 로그인을 밀어내지 못하게)
+const LOGIN_TTL_MS = 10 * 60 * 1000;
+const EMAIL_RE = /^[^@\s]+@([^@\s]+)$/;
+function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, allowedDomains = [], secret, fetchImpl = fetch }) {
+  if (!secret || String(secret).length < 32) throw new Error('OIDC 로그인 상태 암호화 키(SESSION_SECRET)가 필요합니다.');
   let discovery = null; let discoveredAt = 0;
   let jwks = null;
-  const pending = new Map(); // state → { nonce, verifier, exp }
+  const key = crypto.createHash('sha256').update(`oidc-login-state|${secret}`).digest(); // 세션 키와 용도를 나눈다
+  const used = new Map(); // 로그인을 마친 state → 만료 시각(같은 로그인 응답을 두 번 쓰지 못하게). 성공한 로그인만 담기므로 작다.
+  const seal = (obj) => {
+    const iv = crypto.randomBytes(12); const c = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const body = Buffer.concat([c.update(JSON.stringify(obj), 'utf8'), c.final()]);
+    return b64url(Buffer.concat([iv, body, c.getAuthTag()]));
+  };
+  const unseal = (t) => {
+    if (typeof t !== 'string' || t.length > 2048 || !TOKEN_RE.test(t)) return null;
+    try {
+      const raw = Buffer.from(t, 'base64url');
+      const d = crypto.createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12));
+      d.setAuthTag(raw.subarray(raw.length - 16));
+      return JSON.parse(Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]).toString('utf8'));
+    } catch { return null; }
+  };
 
   async function getJson(url, init) {
     const res = await fetchImpl(url, init);
@@ -162,18 +183,17 @@ function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, all
       const m = await meta();
       const state = random(); const nonce = random(); const verifier = random(48);
       const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
-      for (const [k, v] of pending) if (v.exp < Date.now()) pending.delete(k);
-      // 로그인 화면만 계속 여는 요청으로 메모리가 늘지 않게 진행 중인 로그인 수를 제한(오래된 것부터 지움)
-      while (pending.size >= MAX_PENDING_LOGINS) pending.delete(pending.keys().next().value);
-      pending.set(state, { nonce, verifier, exp: Date.now() + 10 * 60 * 1000 });
       const q = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, scope: 'openid profile email',
         state, nonce, code_challenge: challenge, code_challenge_method: 'S256', response_mode: 'query' });
-      return { url: `${m.authorization_endpoint}?${q}`, state };
+      return { url: `${m.authorization_endpoint}?${q}`, cookie: seal({ s: state, n: nonce, v: verifier, x: Date.now() + LOGIN_TTL_MS }), maxAge: LOGIN_TTL_MS / 1000 };
     },
-    async finish(code, state) {
-      const p = pending.get(state);
-      pending.delete(state);
-      if (!p || p.exp < Date.now()) throw new Error('로그인 요청이 만료되었습니다. 다시 시도해 주세요.');
+    // state: 돌아온 주소의 state, cookie: 이 브라우저의 oidc_state 쿠키(시작할 때 준 값)
+    async finish(code, state, cookie) {
+      const c = unseal(cookie);
+      if (!c || typeof c.s !== 'string' || c.s !== state || typeof c.x !== 'number' || c.x < Date.now()) throw new Error('로그인 요청이 만료되었습니다. 다시 시도해 주세요.');
+      for (const [k, x] of used) if (x < Date.now()) used.delete(k);
+      if (used.has(c.s)) throw new Error('이미 사용한 로그인 요청입니다. 다시 로그인해 주세요.');
+      const p = { nonce: c.n, verifier: c.v };
       const m = await meta();
       const tokens = await getJson(m.token_endpoint, {
         method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -181,10 +201,12 @@ function createOidc({ issuer, clientId, clientSecret, redirectUri, tenantId, all
           client_secret: clientSecret, code_verifier: p.verifier }),
       });
       const claims = await verifyIdToken(tokens.id_token, p.nonce);
-      const email = String(claims.email || claims.preferred_username || claims.upn || '').toLowerCase();
-      if (!email) throw new Error('계정 이메일을 확인할 수 없습니다.');
-      if (allowedDomains.length && !allowedDomains.includes(email.split('@').pop())) throw new Error('허용된 회사 계정이 아닙니다.');
+      const email = String(claims.email || claims.preferred_username || claims.upn || '').trim().toLowerCase();
+      const em = email.match(EMAIL_RE); // '@' 가 정확히 하나인 주소만(예: x@evil.com@bdo.kr 거부)
+      if (!em) throw new Error('계정 이메일을 확인할 수 없습니다.');
+      if (allowedDomains.length && !allowedDomains.includes(em[1])) throw new Error('허용된 회사 계정이 아닙니다.');
       const roles = Array.isArray(claims.roles) ? claims.roles.map(String) : [];
+      used.set(c.s, c.x);
       return { email, name: String(claims.name || email), roles };
     },
   };

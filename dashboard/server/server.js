@@ -50,7 +50,7 @@ const storage = createStorage(config.dataDir);
 const sessions = auth.createSessions(config.sessionHours, config.sessionSecret, { revokedFile: path.join(config.dataDir, 'revoked-sessions.json') });
 const limiter = auth.createLimiter();
 const oidc = config.authMode === 'oidc'
-  ? auth.createOidc({ ...config.oidc, allowedDomains: config.allowedDomains, redirectUri: `${config.publicUrl}/auth/callback` })
+  ? auth.createOidc({ ...config.oidc, allowedDomains: config.allowedDomains, redirectUri: `${config.publicUrl}/auth/callback`, secret: config.sessionSecret })
   : null;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const indexHtml = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
@@ -223,39 +223,43 @@ const adminRoutes = {
 
 // ---- 요청 처리 --------------------------------------------------------------
 async function handle(req, res) {
-  const url = new URL(req.url, 'http://x');
+  let url;
+  try { url = new URL(req.url, 'http://x'); } catch { throw Object.assign(new Error('잘못된 요청 주소입니다.'), { status: 400 }); }
   const route = `${req.method} ${url.pathname}`;
 
-  // 상태 확인: 본문은 'ok' 만(배포 도구가 그대로 비교), 버전은 X-Dashboard-Version 머리글로 알려 준다.
-  if (route === 'GET /healthz') { res.setHeader('X-Dashboard-Version', VERSION); return send(req, res, 200, 'ok', 'text/plain'); }
+  // 상태 확인: 본문은 'ok' 만(배포 도구가 그대로 비교), 버전은 X-Dashboard-Version 머리글로 알려 준다. HEAD 도 받는다.
+  if (route === 'GET /healthz' || route === 'HEAD /healthz') { res.setHeader('X-Dashboard-Version', VERSION); return send(req, res, 200, 'ok', 'text/plain'); }
 
   // 로그인
   if (route === 'GET /auth/login') {
     if (oidc) {
-      const { url: to, state } = await oidc.startUrl();
-      return redirect(res, to, { 'Set-Cookie': auth.cookie('oidc_state', state, { maxAge: 600, secure: config.cookieSecure }) });
+      const { url: to, cookie, maxAge } = await oidc.startUrl();
+      return redirect(res, to, { 'Set-Cookie': auth.cookie('oidc_state', cookie, { maxAge, secure: config.cookieSecure }) });
     }
     return loginForm(req, res);
   }
   if (route === 'POST /auth/login' && !oidc) {
     const ip = clientIp(req);
     if (limiter.blocked(ip)) return loginForm(req, res, 429, '로그인 시도가 너무 많습니다. 15분 뒤에 다시 시도해 주세요.');
+    // 확인하기 전에 시도 횟수부터 센다(동시에 여러 번 보내 횟수 제한을 피하지 못하게). 성공하면 지운다.
+    limiter.fail(ip);
     const form = new URLSearchParams((await readBody(req, 10 * 1024)).toString('utf8'));
     const email = String(form.get('email') || '').trim().toLowerCase();
     // 이메일이 틀려도 비밀번호 확인을 똑같이 해서, 응답 시간으로 관리자 이메일을 알아낼 수 없게 한다.
     const passwordOk = await auth.verifyPassword(form.get('password') || '', config.localPasswordHash);
     const ok = passwordOk && email === config.adminEmails[0];
-    if (!ok) { limiter.fail(ip); return loginForm(req, res, 401, '이메일 또는 비밀번호가 맞지 않습니다.'); }
+    if (!ok) return loginForm(req, res, 401, '이메일 또는 비밀번호가 맞지 않습니다.');
     limiter.reset(ip);
     storage.audit({ by: email, action: 'login', ip });
     return startSession(res, email, email);
   }
   if (route === 'GET /auth/callback' && oidc) {
     const state = url.searchParams.get('state') || '';
-    if (!state || auth.parseCookies(req.headers.cookie).oidc_state !== state) return page(req, res, 400, '로그인 오류', '<h1>로그인 오류</h1><p>로그인 요청을 확인할 수 없습니다.</p><a class="btn" href="/auth/login">다시 로그인</a>');
+    const loginCookie = auth.parseCookies(req.headers.cookie).oidc_state;
+    if (!state || !loginCookie) return page(req, res, 400, '로그인 오류', '<h1>로그인 오류</h1><p>로그인 요청을 확인할 수 없습니다.</p><a class="btn" href="/auth/login">다시 로그인</a>');
     if (url.searchParams.get('error')) return page(req, res, 401, '로그인 취소', '<h1>로그인하지 않았습니다</h1><a class="btn" href="/auth/login">다시 로그인</a>');
     try {
-      const who = await oidc.finish(url.searchParams.get('code') || '', state);
+      const who = await oidc.finish(url.searchParams.get('code') || '', state, loginCookie);
       storage.audit({ by: who.email, action: 'login', ip: clientIp(req) });
       const id = sessions.create(who.email, who.name, who.roles);
       return redirect(res, '/', { 'Set-Cookie': [auth.cookie('sid', id, { maxAge: sessions.maxAgeSeconds, secure: config.cookieSecure }), auth.cookie('oidc_state', '', { maxAge: 0, secure: config.cookieSecure })] });
