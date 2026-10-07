@@ -21,10 +21,13 @@ function filterFor(user, input, months) {
   const monthMeta = Object.entries(months).map(([m, r]) => (user.admin ? { month: m, locked: !!r.locked, autoLockHold: !!r.autoLockHold, mappingAt: r.mapping?.at || null, updatedAt: r.updatedAt, by: r.by,
     contract: r.contract ? { fileName: r.contract.fileName, sheetName: r.contract.sheetName, rows: r.contract.rows.length } : null,
     ar: r.ar ? { fileName: r.ar.fileName, sheetName: r.ar.sheetName, rows: r.ar.rows.length } : null } : { month: m, locked: !!r.locked }));
+  // 화면에 필요한 칸만 골라 보낸다(허용 목록). 저장 파일에 서버 보관용 칸(예: manualBeforeFix)이 더 있어도 나가지 않는다.
+  const pick = (d, m, locked, kind) => ({ kind, month: m, locked, fileName: d.fileName, sheetName: d.sheetName, rows: d.rows || [],
+    ...(kind === 'contract' ? { asOf: d.asOf || null, manual: d.manual || [], noId: (d.manual || []).length, ...(d.gijangFixed ? { gijangFixed: true } : {}) } : {}) });
   const all = [];
   for (const [m, r] of Object.entries(months)) {
-    if (r.contract) all.push({ ...r.contract, kind: 'contract', month: m, locked: !!r.locked, ...(r.mapping ? { mapping: r.mapping } : {}) });
-    if (r.ar) all.push({ ...r.ar, kind: 'ar', month: m, locked: !!r.locked });
+    if (r.contract) all.push({ ...pick(r.contract, m, !!r.locked, 'contract'), ...(r.mapping ? { mapping: r.mapping } : {}) });
+    if (r.ar) all.push(pick(r.ar, m, !!r.locked, 'ar'));
   }
   // '보고 당시 기준'은 관리자만 본다. 그 밖의 사람에게는 확정 때 저장한 매핑과 보고 당시 계획을 보내지 않는다.
   const noSnap = (list) => list.map(({ mapping, ...d }) => d);
@@ -44,7 +47,11 @@ function filterFor(user, input, months) {
   const pickBus = (o) => Object.fromEntries(Object.entries(o || {}).filter(([bu]) => allowed.has(bu)));
   const byMonth = (o) => Object.fromEntries(Object.entries(o || {}).map(([m, v]) => [m, pickBus(v)]));
 
-  const datasets = noSnap(all).map((d) => ({ ...d, rows: d.rows.filter(inScope(d.month)), ...(d.manual ? { manual: d.manual.filter(inScope(d.month)) } : {}) }));
+  const datasets = noSnap(all).map((d) => {
+    const out = { ...d, rows: d.rows.filter(inScope(d.month)) };
+    if (d.manual) { out.manual = d.manual.filter(inScope(d.month)); out.noId = out.manual.length; } // 수기 행 수도 권한 범위 기준
+    return out;
+  });
   const visibleNos = new Set();
   datasets.forEach((d) => { if (d.kind === 'contract') d.rows.forEach((r) => visibleNos.add(r.no)); });
   const out = {

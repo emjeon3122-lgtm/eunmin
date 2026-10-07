@@ -90,6 +90,19 @@ try {
     assert.equal(total(store), 700, '고정 후에는 기장추가를 바꿔도 그대로');
     assert.equal(view(store, { admin: false, all: false, bus: ['6팀', '2본부'] }).metric('2025-08', '전체').계약, 350, '본부 권한자: 2본부+6팀');
     assert.equal(view(store, { admin: false, all: true, bus: [] }).metric('2025-08', '전체').계약, 700, '전체 조회자');
+
+    // 서버 보관용 칸(manualBeforeFix)과 다른 본부 자료는 /api/data 응답에 실리지 않는다
+    const KEYS = new Set(['kind', 'month', 'locked', 'fileName', 'sheetName', 'rows', 'asOf', 'manual', 'noId', 'gijangFixed', 'mapping']);
+    for (const u of [admin, { admin: false, all: true, bus: [] }, { admin: false, all: false, bus: ['2본부'] }]) {
+      const p = filterFor(u, store.load().input, store.load().months);
+      for (const d of p.datasets) for (const k of Object.keys(d)) assert.ok(KEYS.has(k), `응답에 허용되지 않은 칸: ${k}`);
+      assert.ok(!JSON.stringify(p).includes('manualBeforeFix'), 'manualBeforeFix 는 누구에게도 보내지 않음');
+    }
+    const p2 = filterFor({ admin: false, all: false, bus: ['2본부'] }, store.load().input, store.load().months);
+    const body = JSON.stringify(p2);
+    for (const other of ['서울1감사', '서울4감사3', 'XA1', 'XC1']) assert.ok(!body.includes(other), `2본부 사용자 응답에 다른 본부 자료 없음: ${other}`);
+    assert.ok(p2.datasets.every((d) => d.kind !== 'contract' || (d.manual.length === 0 && d.noId === 0)), '다른 본부 수기 행·건수도 없음');
+    assert.ok(p2.datasets.some((d) => d.rows.some((r) => r.사업부 === '서울2감사')), '자기 본부 자료는 있음');
   }
 
   // B. 2026.10.06-7·-8 에서 확정(manual=확정 때 기장추가 50으로 고정, 표시 없음) → 입력용 기장추가를 70으로 변경 → 업데이트
