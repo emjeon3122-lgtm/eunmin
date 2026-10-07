@@ -177,9 +177,10 @@ const adminRoutes = {
       const d = sanitize.dataset(raw);
       const rec = { ...monthRecord(d.month) };
       if (rec.locked && !d.locked) { skipped.push({ month: d.month, kind: d.kind, fileName: d.fileName, why: 'locked' }); continue; }
-      const { kind, month, locked, mapping, autoLockHold, ...rest } = d;
+      const { kind, month, locked, mapping, autoLockHold, fileManual, ...rest } = d;
       rec[kind] = rest;
-      if (kind === 'contract') delete rec.fileManual; // 새로 올린 계약 자료가 예전 파일 수기 행을 대신한다
+      // 계약 자료를 새로 받으면 예전 파일 수기 행은 버리고, 백업에서 온 확정 자료면 함께 온 값을 쓴다(월 기록 쪽, contract 밖).
+      if (kind === 'contract') { if (fileManual) rec.fileManual = fileManual; else delete rec.fileManual; }
       // 마감자료·백업에서 온 확정 자료는 그때 저장한 보고 당시 매핑을 그대로 쓴다.
       if (locked) { rec.locked = true; if (kind === 'contract' && mapping) rec.mapping = mapping; }
       else if (autoLockHold) rec.autoLockHold = true; // 백업 복구: 관리자가 직접 푼 달은 자동 확정에서 계속 제외

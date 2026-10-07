@@ -52,7 +52,7 @@ const disk = (m) => JSON.parse(fs.readFileSync(path.join(dir, 'months', `${m}.js
 
     await call('POST', '/api/admin/lock', { upto: '2026-05' });
     let rec = disk('2026-05');
-    assert.ok(rec.locked && rec.contract.gijangFixed && rec.contract.manual[0].계약 === 31000000 && rec.fileManual.length === 2, '확정: 기장추가로 고정, 파일 행은 fileManual');
+    assert.ok(rec.locked && rec.contract.gijangFixed && rec.contract.manual[0].계약 === 31000000 && rec.fileManual.rows.length === 2 && rec.fileManual.key, '확정: 기장추가로 고정, 파일 행은 fileManual(계약 자료 지문 포함)');
     for (const who of [ADMIN, BU]) assert.ok(!JSON.stringify((await view(who)).d).includes('fileManual'), 'fileManual 은 응답에 없음');
     b = await view(BU); a = await view(ADMIN);
     assert.equal(b.r.metric('2026-05', '2본부').계약, a.r.metric('2026-05', '2본부').계약, '확정 후에도 같은 숫자');
@@ -65,12 +65,33 @@ const disk = (m) => JSON.parse(fs.readFileSync(path.join(dir, 'months', `${m}.js
     assert.deepEqual([a.r.metric('2026-05', '1본부').계약, a.r.metric('2026-05', '2본부').계약], [107, 54], '파일의 수기 행(7·4)이 다시 보임');
     assert.equal(b.r.metric('2026-05', '2본부').계약, 54);
 
+    // 확정 → 백업 받기 → 백업으로 복구(확정 자료를 덮어씀) → 풀기: 파일의 수기 행이 돌아온다(백업에 fileManual 포함)
+    await call('POST', '/api/admin/input', { fileName: 'in.xlsx', cfg: cfgWith(G31) });
+    await call('POST', '/api/admin/lock', { upto: '2026-05' });
+    const backup = await (await fetch(`${BASE}/api/admin/backup`, { headers: { cookie: sid(ADMIN) } })).text();
+    const snap = Model.readSnapshot(backup, 'backup.json');
+    await call('POST', '/api/admin/datasets', { datasets: JSON.parse(JSON.stringify(snap.datasets)) });
+    assert.ok(disk('2026-05').locked && disk('2026-05').fileManual?.rows.length === 2, '복구: 확정 상태·파일 수기 행 보관 유지');
+    await call('POST', '/api/admin/unlock', { month: '2026-05' });
+    await call('POST', '/api/admin/input', { fileName: 'in.xlsx', cfg: cfgWith([]) });
+    a = await view(ADMIN);
+    assert.deepEqual([a.r.metric('2026-05', '1본부').계약, a.r.metric('2026-05', '2본부').계약], [107, 54], '복구 후 풀어도 파일 수기 행이 돌아옴');
+
     // 확정 → 새 파일을 올리려면 풀어야 한다. 다시 확정했다가 같은 달 새 파일(풀린 상태) 올리면 예전 fileManual 은 남지 않는다.
     await call('POST', '/api/admin/input', { fileName: 'in.xlsx', cfg: cfgWith(G31) });
     await call('POST', '/api/admin/lock', { upto: '2026-05' });
     await call('POST', '/api/admin/unlock', { month: '2026-05' });
     await call('POST', '/api/admin/datasets', { datasets: [{ kind: 'contract', month: '2026-05', fileName: 'g.xlsx', sheetName: 's', rows: [row('A', '서울1감사', 1)], manual: [] }] });
     assert.ok(!disk('2026-05').fileManual, '새 파일이 예전 수기 행을 대신함');
+    // 다른 계약 자료에서 온 fileManual(예전 버전을 거쳐 그 사이 새 파일을 올린 경우)은 풀 때 되돌리지 않는다
+    const { lockRecord, unlockRecord } = require('../lib/mapping');
+    const F1 = { contract: { rows: [row('A', '서울1감사', 1)], manual: fileManual }, locked: false };
+    const locked1 = lockRecord(cfgWith(G31), '2026-05', F1);
+    const F2 = { ...locked1, contract: { ...locked1.contract, rows: [row('Z', '서울2감사', 2)], manual: [{ 사업부: '서울2감사', 계약구분: '기장', 계약: 9000000, 매출: 0, 메모: '' }] } };
+    assert.equal(unlockRecord(F2).contract.manual[0].계약, 9000000, '지문이 다른 fileManual 은 무시');
+    assert.equal(unlockRecord(locked1).contract.manual.length, 2, '같은 계약 자료면 되돌림');
+    const relock = lockRecord(cfgWith(G31), '2026-05', { ...F2, locked: false });
+    assert.equal(unlockRecord(relock).contract.manual[0].계약, 9000000, '다시 확정하면 지금 파일 행으로 새로 보관');
     console.log('PASS');
   } finally {
     srv.kill(); fs.rmSync(dir, { recursive: true, force: true });

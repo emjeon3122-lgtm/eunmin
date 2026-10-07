@@ -1179,7 +1179,10 @@ const Model = (() => {
       const mapping = mp && typeof mp === 'object' && Array.isArray(mp.bu) ? { bu: pairs(mp.bu), cat: pairs(mp.cat), at: text(mp.at) } : null;
       if (c) out.push({ kind: 'contract', fileName, sheetName: `마감 ${monthLabel(m)} (${text(v.contract.fileName)})`, rows: c, month: m,
         asOf: parseDate(v.contract.asOf), manual, noId: manual.length, locked: v.locked !== false, ...(v.autoLockHold === true ? { autoLockHold: true } : {}),
-        ...(v.contract.gijangFixed === true ? { gijangFixed: true } : {}), ...(mapping ? { mapping } : {}) });
+        ...(v.contract.gijangFixed === true ? { gijangFixed: true } : {}), ...(mapping ? { mapping } : {}),
+        // 서버 백업: 확정 때 바꿔 끼운 파일의 수기 행(서버가 '확정 풀기' 때 되돌림). 화면 계산에는 쓰지 않는다.
+        ...(v.fileManual && typeof v.fileManual === 'object' && Array.isArray(v.fileManual.rows) ? { fileManual: { key: text(v.fileManual.key),
+          rows: v.fileManual.rows.filter((x) => x && typeof x === 'object').map((x) => ({ 사업부: text(x.사업부), 계약구분: text(x.계약구분) || '기장', 계약: num(x.계약), 매출: num(x.매출), 메모: text(x.메모) })) } } : {}) });
       const a = unpack(v.ar, A_FIELDS);
       if (a) out.push({ kind: 'ar', fileName, sheetName: `마감 ${monthLabel(m)} 미수금`, rows: a, month: m, locked: v.locked !== false });
     }

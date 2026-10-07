@@ -14,6 +14,8 @@ function buildBackup({ input, months }) {
   for (const [m, rec] of Object.entries(months)) {
     out[m] = { locked: !!rec.locked, ...(rec.autoLockHold ? { autoLockHold: true } : {}) };
     if (rec.contract) out[m].contract = { ...pack(rec.contract, C_FIELDS), ...(rec.mapping ? { mapping: rec.mapping } : {}) };
+    // 확정 때 기장추가로 바꿔 끼운 파일의 수기 행(확정 풀기 때 되돌림). 복구한 서버에서도 풀 수 있게 함께 둔다.
+    if (rec.contract && rec.locked && rec.fileManual && Array.isArray(rec.fileManual.rows)) out[m].fileManual = rec.fileManual;
     if (rec.ar) out[m].ar = pack(rec.ar, A_FIELDS);
   }
   const keys = Object.keys(out).sort();

@@ -22,7 +22,7 @@ const cfg = config({
 });
 const months = {
   '2026-03': { locked: true, contract: contract('ERP_B본부_대외비(26.03).xlsx', [row('C1', 'S', 10), row('C9', 'S', 3), row('T1', 'T', 7)],
-    { manual: [{ 사업부: 'T', 계약구분: '기장', 계약: 9, 매출: 9, 메모: '' }], manualBeforeFix: [{ 사업부: 'T', 계약: 99 }], gijangFixed: true }), fileManual: [{ 사업부: 'T', 계약: 98 }], mapping: { bu: [], cat: [], at: 'x' } },
+    { manual: [{ 사업부: 'T', 계약구분: '기장', 계약: 9, 매출: 9, 메모: '' }], manualBeforeFix: [{ 사업부: 'T', 계약: 99 }], gijangFixed: true }), fileManual: { key: 'x', rows: [{ 사업부: 'T', 계약: 98 }] }, mapping: { bu: [], cat: [], at: 'x' } },
   '2026-04': { locked: false, contract: contract('ERP(26.04).xlsx', [row('C1', 'S', 11)]) }, // C9 삭제, C1 은 이달부터 B
   '2026-05': { locked: false, contract: contract('ERP(26.05).xlsx', [row('C1', 'S', 12, 'B 파일 사유'), row('C7', 'U', 4)]) },
 };

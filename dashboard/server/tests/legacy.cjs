@@ -77,7 +77,7 @@ try {
     const bk = JSON.parse(fs.readFileSync(r2.backupFile, 'utf8'));
     assert.equal(bk.months['2025-08'].contract.manual[0].계약, 10000000, 'A input: 바꾸기 전 값이 백업에 있음');
     const rec = store.load().months['2025-08'].contract;
-    assert.ok(rec.gijangFixed && rec.manual[0].계약 === 50000000 && store.load().months['2025-08'].fileManual[0].계약 === 10000000, 'A input: 원래 파일 행은 월 기록의 fileManual(contract 밖)에 보관');
+    assert.ok(rec.gijangFixed && rec.manual[0].계약 === 50000000 && store.load().months['2025-08'].fileManual.rows[0].계약 === 10000000, 'A input: 원래 파일 행은 월 기록의 fileManual(contract 밖)에 보관');
     assert.deepEqual(fixLegacyLocks(createStorage(dir), { mode: 'input' }).input, [], '재시작 후에는 할 일 없음');
     // 예전 버전 화면 값(백만원). 보고 당시 기준 25.08월은 확정 때 저장한 매핑(서울2감사 → 1본부)을 쓴다.
     const aug = { current: [350, 200, 0, 150, 700], reported: [550, 0, 0, 150, 700] };
