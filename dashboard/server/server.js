@@ -11,7 +11,7 @@ const sanitize = require('./lib/sanitize');
 const { createStorage } = require('./lib/storage');
 const { resolveUser, filterFor } = require('./lib/access');
 const auth = require('./lib/auth');
-const { buildBackup, scheduleBackups } = require('./lib/backup');
+const { buildBackup, scheduleBackups, writeBackupNow } = require('./lib/backup');
 const { scheduleAutoLock } = require('./lib/autolock');
 const { effectiveMapping, frozenContract, fixLegacyLocks } = require('./lib/mapping');
 
@@ -26,6 +26,7 @@ const config = {
   sessionSecret: readSecret('SESSION_SECRET'),
   allowedDomains: (env.ALLOWED_EMAIL_DOMAINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   adminRole: env.OIDC_ADMIN_ROLE || '',
+  legacyLockGijang: ['stored', 'input'].includes(env.LEGACY_LOCK_GIJANG) ? env.LEGACY_LOCK_GIJANG : '',
   backup: { dir: env.BACKUP_DIR || '', hour: Number(env.BACKUP_HOUR || 3), keepDays: Number(env.BACKUP_KEEP_DAYS || 30) },
   publicUrl: (env.PUBLIC_URL || '').replace(/\/$/, ''),
   authMode: env.AUTH_MODE || 'local',
@@ -320,6 +321,13 @@ const server = http.createServer((req, res) => {
 });
 server.requestTimeout = 5 * 60 * 1000;
 scheduleBackups({ ...config.backup, dir: config.backup.dir || path.join(config.dataDir, 'backups'), load: storage.load, log: (m) => console.log(m) });
-{ const fixed = fixLegacyLocks(storage); if (fixed.length) console.log(`예전 버전 확정월의 기장 수기분 고정: ${fixed.join(', ')}`); }
+{ // 예전 버전에서 확정한 달 정리(lib/mapping.js). 바꾸기 전에 백업 폴더에 pre-upgrade-*.json 을 남긴다.
+  const backupDir = config.backup.dir || path.join(config.dataDir, 'backups');
+  const r = fixLegacyLocks(storage, { mode: config.legacyLockGijang, backup: () => writeBackupNow(backupDir, storage.load) });
+  if (r.backupFile) console.log(`업데이트 전 백업: ${r.backupFile}`);
+  if (r.error) console.log(r.error);
+  for (const k of ['same', 'stored', 'input']) if (r[k].length) console.log(`예전 확정월 기장 수기분 고정(${k}): ${r[k].join(', ')}`);
+  if (r.pending.length) console.log(`확인 필요: 예전 확정월 ${r.pending.join(', ')} 은 저장된 기장 수기분과 입력용 기장추가가 다릅니다. 값은 바꾸지 않았습니다(화면은 입력용 기장추가 기준). UPDATE.md 의 LEGACY_LOCK_GIJANG 참고.`);
+}
 scheduleAutoLock({ storage, log: (m) => console.log(m) });
 server.listen(config.port, config.host, () => console.log(`실적 대시보드 서버 ${VERSION}: http://${config.host}:${config.port} (로그인 방식: ${config.authMode})`));

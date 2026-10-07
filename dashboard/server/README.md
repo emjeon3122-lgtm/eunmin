@@ -50,6 +50,7 @@ PC용 `실적대시보드.html` 과 같은 화면을 회사 NAS 에서 제공합
 | `PORT` / `HOST` | `7020` / `127.0.0.1` |
 | `TRUST_PROXY` / `COOKIE_SECURE` | `true` / `true` |
 | `BACKUP_HOUR` / `BACKUP_KEEP_DAYS` / `BACKUP_DIR` | 자동 백업 시각(기본 3시) / 보관 일수(30) / 폴더(기본 `/data/backups`) |
+| `LEGACY_LOCK_GIJANG` | (선택) 예전 버전 확정월의 기장 수기분 정리 기준 `input`/`stored`. 비우면 바꾸지 않고 알림(UPDATE.md) |
 
 비밀값은 `변수이름_FILE=/경로` 로 파일에서 읽게 할 수도 있다(`OIDC_CLIENT_SECRET_FILE`, `SESSION_SECRET_FILE` 등).
 

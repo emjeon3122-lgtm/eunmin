@@ -49,4 +49,15 @@ function scheduleBackups({ dir, hour, keepDays, load, log }) {
   setInterval(tick, 30 * 60 * 1000).unref();
 }
 
-module.exports = { buildBackup, scheduleBackups };
+// 업데이트 때 자료를 고치기 전에 남기는 백업(자동 삭제 대상이 아님). 디스크에 다 쓴 뒤에만 파일 이름을 돌려준다.
+function writeBackupNow(dir, load, prefix = 'pre-upgrade') {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const file = path.join(dir, `${prefix}-${new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '')}.json`);
+  const tmp = `${file}.tmp`;
+  const fd = fs.openSync(tmp, 'w', 0o600);
+  try { fs.writeSync(fd, buildBackup(load())); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  fs.renameSync(tmp, file);
+  return file;
+}
+
+module.exports = { buildBackup, scheduleBackups, writeBackupNow };
