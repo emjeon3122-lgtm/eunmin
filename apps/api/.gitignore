@@ -9,3 +9,4 @@ generated/
 .env
 prisma/*.db
 prisma/*.db-journal
+*.tsbuildinfo
