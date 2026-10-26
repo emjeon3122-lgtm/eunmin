@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPut, ApiError } from "@/lib/api";
 import { OCCASION_TYPE_LABELS } from "@/lib/labels";
 import type { ApprovalRule, OccasionType, Product, Vendor } from "@/lib/types";
+import { IntegrationSettings } from "@/components/admin/IntegrationSettings";
 
 const CHANNEL_TYPE_OPTIONS: Vendor["channelType"][] = ["kakao_friendtalk", "kakao_alimtalk", "api", "email"];
 const FALLBACK_CHANNEL_OPTIONS: Vendor["fallbackChannel"][] = ["manual_admin_alert", "sms", "none"];
@@ -13,6 +14,7 @@ export default function AdminSettingsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-10">
       <h1 className="text-lg font-semibold text-gray-900">설정</h1>
+      <IntegrationSettings />
       <VendorSettings />
       <ApprovalRuleSettings />
     </div>

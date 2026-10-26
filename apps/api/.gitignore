@@ -3,3 +3,9 @@ dist/
 uploads/
 generated/
 *.log
+
+# 관리자 화면 연동 설정(암호화 파일) — 로컬 시험용, 커밋 금지
+/settings/
+.env
+prisma/*.db
+prisma/*.db-journal

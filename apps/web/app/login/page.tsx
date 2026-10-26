@@ -29,27 +29,29 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/requests";
   const [method, setMethod] = useState<LoginMethod | null>(null);
+  // 임시 관리자(아이디+비밀번호) 로그인이 열려 있는지 — 로그인 방식과 별개로 함께 보여 준다.
+  const [localLogin, setLocalLogin] = useState(false);
   const [employeeNo, setEmployeeNo] = useState("");
+  const [localId, setLocalId] = useState("");
+  const [localPassword, setLocalPassword] = useState("");
   const [error, setError] = useState<string | null>(ERROR_MESSAGES[searchParams.get("error") ?? ""] ?? null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    apiGet<{ data: { loginMethod: LoginMethod } }>("/auth/config", { auth: false })
-      .then((res) => setMethod(res.data.loginMethod))
+    apiGet<{ data: { loginMethod: LoginMethod; localLogin?: boolean } }>("/auth/config", { auth: false })
+      .then((res) => {
+        setMethod(res.data.loginMethod);
+        setLocalLogin(Boolean(res.data.localLogin));
+      })
       .catch((err) => setError(err instanceof ApiError ? err.message : "로그인 설정을 불러오지 못했습니다."));
   }, []);
 
-  async function handleDevLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!employeeNo.trim()) return;
+  // 토큰을 받은 뒤 공통 처리: /auth/me 로 내 정보를 읽어 저장하고 원래 가려던 화면으로.
+  async function finishLogin(path: string, body: Record<string, string>) {
     setLoading(true);
     setError(null);
     try {
-      const loginRes = await apiPost<{ data: { token: string } }>(
-        "/auth/dev-login",
-        { employeeNo: employeeNo.trim() },
-        { auth: false }
-      );
+      const loginRes = await apiPost<{ data: { token: string } }>(path, body, { auth: false });
       const token = loginRes.data.token;
       // Temporarily stash the token so the /auth/me call below can attach it.
       window.localStorage.setItem("wreath_token", token);
@@ -63,6 +65,53 @@ function LoginContent() {
       setLoading(false);
     }
   }
+
+  async function handleDevLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!employeeNo.trim()) return;
+    await finishLogin("/auth/dev-login", { employeeNo: employeeNo.trim() });
+  }
+
+  async function handleLocalLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!localId.trim() || !localPassword) return;
+    await finishLogin("/auth/local-login", { id: localId.trim(), password: localPassword });
+  }
+
+  const localLoginForm = localLogin && (
+    <form onSubmit={handleLocalLogin} className="space-y-3">
+      <div>
+        <label htmlFor="localId">관리자 아이디</label>
+        <input
+          id="localId"
+          type="text"
+          autoComplete="username"
+          value={localId}
+          onChange={(e) => setLocalId(e.target.value)}
+          className="w-full"
+        />
+      </div>
+      <div>
+        <label htmlFor="localPassword">비밀번호</label>
+        <input
+          id="localPassword"
+          type="password"
+          autoComplete="current-password"
+          value={localPassword}
+          onChange={(e) => setLocalPassword(e.target.value)}
+          className="w-full"
+        />
+      </div>
+      {error && method !== "dev" && <p className="text-sm text-red-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={loading || !localId.trim() || !localPassword}
+        className="w-full rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {loading ? "로그인 중..." : "관리자로 로그인"}
+      </button>
+    </form>
+  );
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
@@ -79,6 +128,12 @@ function LoginContent() {
             >
               Microsoft 365로 로그인
             </a>
+            {localLoginForm && (
+              <details className="pt-2">
+                <summary className="cursor-pointer text-xs text-gray-400">관리자 임시 로그인</summary>
+                <div className="mt-3">{localLoginForm}</div>
+              </details>
+            )}
           </div>
         )}
 
@@ -112,13 +167,26 @@ function LoginContent() {
                 {loading ? "로그인 중..." : "로그인"}
               </button>
             </form>
+            {localLoginForm && (
+              <div className="mt-6 border-t border-gray-100 pt-4">
+                <p className="mb-3 text-xs font-medium text-gray-500">관리자 임시 로그인</p>
+                {localLoginForm}
+              </div>
+            )}
           </>
         )}
 
         {method === "none" && (
-          <p className="mt-6 text-sm text-gray-600">
-            로그인 방식이 아직 설정되지 않았습니다. 관리자에게 문의해주세요.
-          </p>
+          <div className="mt-6 space-y-4">
+            {localLoginForm ? (
+              <>
+                <p className="text-sm text-gray-500">관리자 임시 계정으로 로그인합니다.</p>
+                {localLoginForm}
+              </>
+            ) : (
+              <p className="text-sm text-gray-600">로그인 방식이 아직 설정되지 않았습니다. 관리자에게 문의해주세요.</p>
+            )}
+          </div>
         )}
 
         {method === null && !error && <p className="mt-6 text-sm text-gray-400">불러오는 중...</p>}

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { BaseClient, Issuer, generators } from 'openid-client';
 import { AppConfig } from '../config/configuration';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 
 // 로그인 시작~복귀 사이에 브라우저 쿠키로 들고 다니는 1회용 값. state는 다른 사람이 만든
 // 로그인 응답을 끼워 넣는 공격(CSRF)을, nonce는 토큰 재사용을, code_verifier(PKCE)는
@@ -21,14 +21,39 @@ export interface OidcIdentity {
 // Microsoft 365(Entra ID)를 포함한 표준 OIDC 공급자 로그인. 발급자(issuer)·클라이언트
 // 값은 전산 담당자가 OIDC_* 환경변수로 넣는다 — Entra라면
 // OIDC_ISSUER=https://login.microsoftonline.com/<테넌트 ID>/v2.0
+// 관리자 화면에서 값을 바꾸면(IntegrationSettingsService) 재시작 없이 다음 로그인부터 새 값을 쓴다.
 @Injectable()
 export class OidcService {
   private readonly logger = new Logger(OidcService.name);
-  private readonly config: AppConfig['oidc'];
   private clientPromise: Promise<BaseClient> | null = null;
 
-  constructor(configService: ConfigService) {
-    this.config = configService.get<AppConfig['oidc']>('app.oidc')!;
+  constructor(private readonly settings: IntegrationSettingsService) {
+    // 설정이 바뀌면 캐시한 공급자 정보·클라이언트를 버리고 다음 요청에서 다시 만든다.
+    this.settings.onChange(() => {
+      this.clientPromise = null;
+    });
+  }
+
+  // 항상 현재 저장된 값을 읽는다(.env 기본값 또는 관리자가 저장한 값).
+  private get config(): AppConfig['oidc'] {
+    const auth = this.settings.get().auth;
+    return {
+      issuer: auth.oidcIssuer,
+      clientId: auth.oidcClientId,
+      clientSecret: auth.oidcClientSecret,
+      redirectUri: auth.oidcRedirectUri,
+    };
+  }
+
+  // 관리자 화면의 [연결 확인] — 발급자 정보를 새로 받아와 주소가 맞는지 본다(로그인은 하지 않는다).
+  async checkConnection(): Promise<{ issuer: string; authorizationEndpoint: string }> {
+    const { issuer, clientId } = this.config;
+    if (!issuer) throw new Error('발급자(Issuer) 주소가 비어 있습니다.');
+    if (!clientId) throw new Error('클라이언트 ID 가 비어 있습니다.');
+    const found = await Issuer.discover(issuer);
+    const authorizationEndpoint = String(found.metadata.authorization_endpoint ?? '');
+    if (!authorizationEndpoint) throw new Error('공급자 정보에 로그인 주소가 없습니다.');
+    return { issuer: String(found.metadata.issuer ?? issuer), authorizationEndpoint };
   }
 
   async startLogin(next: string): Promise<{ url: string; transaction: OidcTransaction }> {

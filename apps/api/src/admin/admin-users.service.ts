@@ -3,6 +3,8 @@ import { Prisma, User } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotFoundApiException } from '../common/exceptions/api.exception';
+import { CreateUserDto } from './dto/create-user.dto';
 
 // 엑셀 열 → 필드. 열 순서는 자유이고, 머리글은 공백·괄호 내용을 무시하고 비교한다
 // ("파트너 여부(Y/N)" == "파트너여부").
@@ -50,6 +52,46 @@ const normalizeHeader = (s: string) => s.replace(/\(.*?\)/g, '').replace(/\s+/g,
 @Injectable()
 export class AdminUsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  // 직원 한 명 추가 — 엑셀 없이 관리자 화면에서 바로 넣는다(기본 관리자 등록용).
+  async createOne(dto: CreateUserDto) {
+    const email = dto.email.trim().toLowerCase();
+    const [byNo, byEmail] = await Promise.all([
+      this.prisma.user.findUnique({ where: { employeeNo: dto.employeeNo } }),
+      this.prisma.user.findUnique({ where: { email } }),
+    ]);
+    if (byNo) throw new BadRequestException(`사번 ${dto.employeeNo}은(는) 이미 등록돼 있습니다.`);
+    if (byEmail) throw new BadRequestException(`회사 이메일 ${email}은(는) 이미 사번 ${byEmail.employeeNo}이(가) 쓰고 있습니다.`);
+    await this.prisma.user.create({
+      data: {
+        employeeNo: dto.employeeNo,
+        name: dto.name.trim(),
+        department: dto.department.trim(),
+        email,
+        phone: dto.phone?.trim() || null,
+        isPartner: dto.isPartner ?? false,
+        role: dto.isAdmin ? 'admin' : 'employee',
+        // 로그인 연결 전이라 Microsoft 계정 고유값이 없다 — 첫 로그인 때 회사 이메일로 연결된다.
+        ssoSubjectId: `pending:${randomUUID()}`,
+      },
+    });
+    return this.list();
+  }
+
+  // 관리자 지정/해제. 본인 권한과 마지막 관리자는 해제할 수 없다(아무도 못 들어오는 상태 방지).
+  async setRole(employeeNo: string, role: 'admin' | 'employee', actingUserId: string) {
+    const user = await this.prisma.user.findUnique({ where: { employeeNo } });
+    if (!user) throw new NotFoundApiException('직원을 찾을 수 없습니다.');
+    if (role !== 'admin' && user.role === 'admin') {
+      if (user.id === actingUserId) throw new BadRequestException('본인의 관리자 권한은 해제할 수 없습니다.');
+      const admins = await this.prisma.user.count({ where: { role: 'admin' } });
+      if (admins <= 1) throw new BadRequestException('마지막 관리자는 해제할 수 없습니다.');
+    }
+    if (user.role !== role) {
+      await this.prisma.user.update({ where: { id: user.id }, data: { role } });
+    }
+    return this.list();
+  }
 
   list() {
     return this.prisma.user

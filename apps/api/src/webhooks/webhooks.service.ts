@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { timingSafeEqual } from 'crypto';
-import { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 
 // 솔라피 상태 코드: 2000 정상 접수 / 3000 이통사 접수(진행 중) / 4000 수신 완료.
 // 그 외 코드는 실패로 본다(알림톡 실패 후 문자 대체발송까지 실패한 경우 포함).
@@ -27,24 +26,25 @@ interface SolapiReport {
 @Injectable()
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
-  private readonly token: Buffer | null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
-    configService: ConfigService,
+    private readonly settings: IntegrationSettingsService,
   ) {
-    const secret = configService.get<AppConfig['kakao']['webhookSecret']>('app.kakao.webhookSecret') ?? '';
+    const secret = this.settings.get().vendor.webhookSecret;
     if (secret && secret.length < MIN_TOKEN_LENGTH) {
-      this.logger.warn(`KAKAO_WEBHOOK_SECRET이 ${MIN_TOKEN_LENGTH}자 미만이라 솔라피 콜백을 받지 않습니다.`);
+      this.logger.warn(`웹훅 비밀값이 ${MIN_TOKEN_LENGTH}자 미만이라 솔라피 콜백을 받지 않습니다.`);
     }
-    this.token = secret.length >= MIN_TOKEN_LENGTH ? Buffer.from(secret) : null;
   }
 
+  // 비밀값은 관리자 화면에서 바꿀 수 있어 요청마다 현재 설정을 읽는다.
   isAuthorized(token: string): boolean {
-    if (!this.token) return false;
+    const secret = this.settings.get().vendor.webhookSecret;
+    if (secret.length < MIN_TOKEN_LENGTH) return false;
+    const expected = Buffer.from(secret);
     const provided = Buffer.from(token);
-    return provided.length === this.token.length && timingSafeEqual(provided, this.token);
+    return provided.length === expected.length && timingSafeEqual(provided, expected);
   }
 
   async handleSolapiReport(body: unknown): Promise<{ received: true; processed: number }> {

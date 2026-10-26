@@ -182,6 +182,18 @@ export interface RosterUser {
   loginLinked: boolean; // Microsoft 365로 한 번이라도 로그인해 계정이 연결됐는지
 }
 
+// 관리자 > 직원 명단 > 회사 계정에서 찾아 추가 (GET /api/admin/users/directory?q=)
+export interface DirectoryPerson {
+  oid: string; // Microsoft 계정 고유값
+  name: string;
+  email: string;
+  department: string;
+  jobTitle: string;
+  phone: string;
+  enabled: boolean; // false 면 회사에서 로그인이 막힌 계정
+  registeredAs: string | null; // 이미 명단에 있으면 그 사번
+}
+
 export interface RosterImportResult {
   applied: boolean;
   total: number;
@@ -214,3 +226,52 @@ export interface ParsedInvitationFields {
   deliveryDetail?: string;
   desiredArrivalAt?: string;
 }
+
+// 관리자 > 설정 > 외부 연동 (GET/PUT /api/admin/integration-settings).
+// 비밀값은 저장 여부와 끝 4자리만 내려온다 — 전체 값은 어떤 API 로도 돌려주지 않는다.
+export interface SecretView {
+  set: boolean;
+  hint: string;
+}
+
+export interface IntegrationSettingsView {
+  auth: {
+    mode: "mock" | "oidc";
+    allowDevLogin: boolean;
+    oidcIssuer: string;
+    oidcClientId: string;
+    oidcClientSecret: SecretView;
+    oidcRedirectUri: string;
+    // 임시 관리자 계정(아이디+비밀번호 로그인). SSO 연동 전까지만 쓰고 지운다.
+    localAdmin: { id: string; set: boolean };
+  };
+  vendor: {
+    adapter: "mock" | "kakao";
+    apiKey: SecretView;
+    apiSecret: SecretView;
+    senderKey: string;
+    senderPhone: string;
+    apiBaseUrl: string;
+    templateId: string;
+    webhookSecret: SecretView;
+  };
+  invitationParser: {
+    mode: "mock" | "claude";
+    anthropicApiKey: SecretView;
+    model: string;
+  };
+  effective: {
+    loginMethod: "oidc" | "dev" | "none";
+    localLogin: boolean;
+    vendorAdapter: "mock" | "kakao";
+    invitationParser: "mock" | "claude";
+  };
+  meta: {
+    file: string;
+    fromFile: boolean;
+    savedAt: string | null;
+    savedBy: string | null;
+  };
+}
+
+export type IntegrationSection = "auth" | "vendor" | "invitationParser";

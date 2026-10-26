@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from './jwt.types';
 import { Role, assertEnum } from '../common/enums';
 import { OidcIdentity } from './oidc.service';
+import { verifyPassword } from '../common/password';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 
 @Injectable()
 export class AuthService {
@@ -13,7 +15,18 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly settings: IntegrationSettingsService,
   ) {}
+
+  // 임시 관리자(아이디+비밀번호) 로그인 — SSO 연동 전까지 쓰는 계정. 관리자 화면에서 만들고 지운다.
+  // 아이디·비밀번호가 맞고 그 사번의 직원이 관리자일 때만 통과한다(null 이면 실패).
+  async localLogin(id: string, password: string): Promise<{ token: string; user: JwtPayload } | null> {
+    const local = this.settings.localAdmin();
+    if (!local || local.id !== id || !verifyPassword(password, local.passwordHash)) return null;
+    const user = await this.prisma.user.findUnique({ where: { employeeNo: id } });
+    if (!user || user.role !== 'admin') return null;
+    return this.issue(user);
+  }
 
   // 사번만으로 로그인하는 개발용 경로(AUTH_MODE=mock). 운영에서는 ALLOW_DEV_LOGIN일 때만 열린다.
   async devLogin(employeeNo: string): Promise<{ token: string; user: JwtPayload }> {

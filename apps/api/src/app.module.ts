@@ -18,10 +18,12 @@ import { VendorStatusModule } from './vendor-status/vendor-status.module';
 import { AdminModule } from './admin/admin.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { InvitationParserModule } from './invitation-parser/invitation-parser.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    SettingsModule,
     PrismaModule,
     AuthModule,
     UsersModule,

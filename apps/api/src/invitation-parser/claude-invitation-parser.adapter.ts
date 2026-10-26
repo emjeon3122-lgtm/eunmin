@@ -1,10 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 import { BlockedUrlError, fetchPublicText } from '../common/safe-fetch';
-import { AppConfig } from '../config/configuration';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 import { InvitationParserAdapter, ParsedInvitationFields } from './invitation-parser.interface';
 
 // 모바일 청첩장/부고장에서 배송 정보를 뽑아내는 실제 구현체.
@@ -53,13 +52,28 @@ const PAGE_FETCH_OPTIONS = {
 @Injectable()
 export class ClaudeInvitationParserAdapter implements InvitationParserAdapter {
   private readonly logger = new Logger(ClaudeInvitationParserAdapter.name);
-  private readonly client: Anthropic;
-  private readonly model: string;
+  private cached: { apiKey: string; client: Anthropic } | null = null;
 
-  constructor(configService: ConfigService) {
-    const apiKey = configService.get<AppConfig['anthropic']['apiKey']>('app.anthropic.apiKey')!;
-    this.model = configService.get<AppConfig['anthropic']['model']>('app.anthropic.model')!;
-    this.client = new Anthropic({ apiKey });
+  // 키·모델은 호출할 때마다 연동 설정(관리자 화면 저장값 또는 .env)에서 읽는다.
+  constructor(private readonly settings: IntegrationSettingsService) {}
+
+  private get model(): string {
+    return this.settings.get().invitationParser.model;
+  }
+
+  private get client(): Anthropic {
+    const apiKey = this.settings.get().invitationParser.anthropicApiKey;
+    if (!this.cached || this.cached.apiKey !== apiKey) {
+      this.cached = { apiKey, client: new Anthropic({ apiKey }) };
+    }
+    return this.cached.client;
+  }
+
+  // 관리자 화면의 [연결 확인] — 모델 정보 조회로 키와 모델 이름이 맞는지만 본다(토큰 비용 없음).
+  async checkConnection(): Promise<{ model: string; displayName: string }> {
+    if (!this.settings.get().invitationParser.anthropicApiKey) throw new Error('Anthropic API 키가 비어 있습니다.');
+    const found = await this.client.models.retrieve(this.model);
+    return { model: found.id, displayName: found.display_name };
   }
 
   async parseUrl(url: string): Promise<ParsedInvitationFields> {

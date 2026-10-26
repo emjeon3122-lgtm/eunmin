@@ -7,3 +7,4 @@ uploads
 !.env.example
 prisma/*.db
 prisma/*.db-journal
+settings

@@ -1,30 +1,28 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { AppConfig } from '../config/configuration';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 import { SolapiAlimtalkAdapter } from './solapi-alimtalk.adapter';
 import { MockVendorAdapter } from './mock-vendor.adapter';
-import { VENDOR_ADAPTER } from './vendor-adapter.interface';
+import { VENDOR_ADAPTER, VendorAdapter, VendorMessagePayload } from './vendor-adapter.interface';
 
-// VENDOR_ADAPTER env selects the implementation behind one injection token —
-// swapping vendors/channels later is a one-line env change, no call-site changes.
+// 하나의 주입 토큰 뒤에서 구현체를 고른다. 어느 쪽을 쓸지는 관리자 화면의 연동 설정
+// (기본값은 VENDOR_ADAPTER env)이 정하고, 발송할 때마다 현재 값을 읽으므로 재시작 없이 바뀐다.
 @Module({
-  imports: [ConfigModule],
   providers: [
     MockVendorAdapter,
     SolapiAlimtalkAdapter,
     {
       provide: VENDOR_ADAPTER,
-      inject: [ConfigService, MockVendorAdapter, SolapiAlimtalkAdapter],
+      inject: [IntegrationSettingsService, MockVendorAdapter, SolapiAlimtalkAdapter],
       useFactory: (
-        config: ConfigService,
+        settings: IntegrationSettingsService,
         mock: MockVendorAdapter,
         solapi: SolapiAlimtalkAdapter,
-      ) => {
-        const mode = config.get<AppConfig['vendorAdapter']>('app.vendorAdapter');
-        return mode === 'kakao' ? solapi : mock;
-      },
+      ): VendorAdapter => ({
+        send: (payload: VendorMessagePayload) =>
+          (settings.get().vendor.adapter === 'kakao' ? solapi : mock).send(payload),
+      }),
     },
   ],
-  exports: [VENDOR_ADAPTER],
+  exports: [VENDOR_ADAPTER, SolapiAlimtalkAdapter],
 })
 export class VendorModule {}

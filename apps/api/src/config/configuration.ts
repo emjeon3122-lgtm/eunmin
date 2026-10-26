@@ -1,4 +1,6 @@
 // Central typed config loader for @nestjs/config — keeps env var names in one place.
+import { dirname, join, resolve } from 'path';
+
 export interface AppConfig {
   isProduction: boolean;
   databaseUrl: string;
@@ -11,6 +13,8 @@ export interface AppConfig {
   // 사번만으로 로그인하는 개발용 로그인. 운영(NODE_ENV=production)에서는 인터넷에 그대로
   // 노출되면 아무 사번으로나 들어올 수 있으므로 ALLOW_DEV_LOGIN=true로 명시해야만 켜진다.
   devLoginEnabled: boolean;
+  // ALLOW_DEV_LOGIN 원값 — 관리자 화면의 연동 설정(settings/)이 기본값으로 쓴다.
+  allowDevLogin: boolean;
   oidc: {
     issuer: string;
     clientId: string;
@@ -29,6 +33,11 @@ export interface AppConfig {
   };
   storageDriver: 'local';
   storageLocalDir: string;
+  // 관리자 화면에서 저장하는 연동 설정(OIDC·Solapi·Anthropic 키)의 암호화 파일 경로와 키.
+  // 기본 경로는 업로드 폴더 옆 settings/integrations.enc (도커에서는 /data/settings/integrations.enc).
+  // 키를 비우면 JWT_SECRET 에서 파생한다 — settings/integration-settings.service.ts 참고.
+  settingsFile: string;
+  settingsEncryptionKey: string;
   // 업로드 파일 서명 주소의 유효 시간(초). 화면을 열어둔 채 이보다 오래 지나면 새로고침 필요.
   fileUrlTtlSeconds: number;
   // 청첩장/부고장 자동 채우기 — 'mock'이면 외부로 아무것도 보내지 않고 빈 결과를
@@ -45,6 +54,8 @@ const DEFAULT_JWT_SECRET = 'change-me-in-production';
 export default (): { app: AppConfig } => {
   const isProduction = process.env.NODE_ENV === 'production';
   const authMode = (process.env.AUTH_MODE as 'mock' | 'oidc') ?? 'mock';
+  const allowDevLogin = process.env.ALLOW_DEV_LOGIN === 'true';
+  const storageLocalDir = process.env.STORAGE_LOCAL_DIR ?? './uploads';
   return {
     app: {
       isProduction,
@@ -55,7 +66,8 @@ export default (): { app: AppConfig } => {
       jwtSecret: process.env.JWT_SECRET ?? DEFAULT_JWT_SECRET,
       jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
       authMode,
-      devLoginEnabled: authMode === 'mock' && (!isProduction || process.env.ALLOW_DEV_LOGIN === 'true'),
+      devLoginEnabled: authMode === 'mock' && (!isProduction || allowDevLogin),
+      allowDevLogin,
       oidc: {
         issuer: process.env.OIDC_ISSUER ?? '',
         clientId: process.env.OIDC_CLIENT_ID ?? '',
@@ -73,7 +85,10 @@ export default (): { app: AppConfig } => {
         webhookSecret: process.env.KAKAO_WEBHOOK_SECRET ?? '',
       },
       storageDriver: (process.env.STORAGE_DRIVER as 'local') ?? 'local',
-      storageLocalDir: process.env.STORAGE_LOCAL_DIR ?? './uploads',
+      storageLocalDir,
+      settingsFile:
+        process.env.SETTINGS_FILE ?? join(dirname(resolve(storageLocalDir)), 'settings', 'integrations.enc'),
+      settingsEncryptionKey: process.env.SETTINGS_ENCRYPTION_KEY ?? '',
       fileUrlTtlSeconds: parseInt(process.env.FILE_URL_TTL_SECONDS ?? '43200', 10),
       invitationParser: (process.env.INVITATION_PARSER as 'mock' | 'claude') ?? 'mock',
       anthropic: {

@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { apiDownload, apiGet, apiPostForm, ApiError } from "@/lib/api";
+import { apiDownload, apiGet, apiPatch, apiPost, apiPostForm, ApiError } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 import type { RosterImportResult, RosterUser } from "@/lib/types";
+import { DirectorySearch } from "@/components/admin/DirectorySearch";
+
+// 자주 쓰지 않는 추가 방법(엑셀·직접 입력)은 접어 둔다.
+const SUMMARY =
+  "cursor-pointer list-none px-5 py-3 text-sm font-semibold text-gray-900 [&::-webkit-details-marker]:hidden";
+
+const EMPTY_FORM ={ employeeNo: "", name: "", department: "", email: "", phone: "", isPartner: false, isAdmin: false };
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<RosterUser[] | null>(null);
@@ -12,6 +20,51 @@ export default function AdminUsersPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [formMessage, setFormMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [roleBusy, setRoleBusy] = useState<string | null>(null);
+  const [roleMessage, setRoleMessage] = useState<string | null>(null);
+  const me = getStoredUser();
+
+  // 직원 한 명 추가(엑셀 없이) — 기본 관리자 등록 등 소수 인원은 여기서.
+  async function addOne(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setFormMessage(null);
+    try {
+      const res = await apiPost<{ data: RosterUser[] }>("/admin/users", {
+        ...form,
+        employeeNo: form.employeeNo.trim(),
+        name: form.name.trim(),
+        department: form.department.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+      });
+      setUsers(res.data);
+      setForm(EMPTY_FORM);
+      setFormMessage({ type: "success", text: "추가했습니다." });
+    } catch (err) {
+      setFormMessage({ type: "error", text: err instanceof ApiError ? err.message : "추가하지 못했습니다." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 관리자 지정/해제 — 본인과 마지막 관리자는 서버가 거부한다.
+  async function setRole(u: RosterUser, role: "admin" | "employee") {
+    const label = role === "admin" ? "관리자로 지정" : "관리자 권한 해제";
+    if (!window.confirm(`${u.name}(${u.employeeNo})님을 ${label}할까요?`)) return;
+    setRoleBusy(u.employeeNo);
+    setRoleMessage(null);
+    try {
+      const res = await apiPatch<{ data: RosterUser[] }>(`/admin/users/${encodeURIComponent(u.employeeNo)}/role`, { role });
+      setUsers(res.data);
+    } catch (err) {
+      setRoleMessage(err instanceof ApiError ? err.message : "권한을 바꾸지 못했습니다.");
+    } finally {
+      setRoleBusy(null);
+    }
+  }
 
   function load() {
     apiGet<{ data: RosterUser[] }>("/admin/users")
@@ -75,9 +128,15 @@ export default function AdminUsersPage() {
         Microsoft 365 로그인은 이 명단의 회사 이메일과 대조해 등록된 직원만 들어올 수 있습니다.
       </p>
 
-      <section className="mt-5 rounded-lg border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-gray-900">엑셀로 명단 올리기</h2>
-        <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-sm text-gray-600">
+      <DirectorySearch onAdded={setUsers} />
+
+      <details className="group mt-5 rounded-lg border border-gray-200 bg-white">
+        <summary className={SUMMARY}>
+          <span className="mr-2 inline-block text-gray-400 transition-transform group-open:rotate-90">▶</span>
+          엑셀로 명단 한꺼번에 올리기
+        </summary>
+        <div className="border-t border-gray-100 p-5">
+        <ol className="list-decimal space-y-0.5 pl-5 text-sm text-gray-600">
           <li>위의 &quot;현재 명단 엑셀로 받기&quot;로 양식을 내려받아 직원을 추가·수정합니다.</li>
           <li>파일을 선택하고 &quot;확인하기&quot;를 누르면 바뀔 내용을 먼저 보여드립니다.</li>
           <li>오류가 없으면 &quot;명단에 반영하기&quot;를 눌러 한 번에 반영합니다. 엑셀에 없는 직원은 삭제되지 않습니다.</li>
@@ -148,13 +207,69 @@ export default function AdminUsersPage() {
         {message && (
           <p className={`mt-3 text-sm ${message.type === "error" ? "text-red-600" : "text-green-700"}`}>{message.text}</p>
         )}
-      </section>
+        </div>
+      </details>
+
+      <details className="group mt-3 rounded-lg border border-gray-200 bg-white">
+        <summary className={SUMMARY}>
+          <span className="mr-2 inline-block text-gray-400 transition-transform group-open:rotate-90">▶</span>
+          직접 입력해서 추가 (회사 계정 검색이 안 될 때)
+        </summary>
+        <div className="border-t border-gray-100 p-5">
+        <p className="text-xs text-gray-500">
+          엑셀 없이 바로 추가합니다. 회사 이메일은 Microsoft 365 로그인 주소와 같아야 합니다.
+        </p>
+        <form onSubmit={addOne} className="mt-3 grid gap-3 sm:grid-cols-4">
+          <div>
+            <label htmlFor="newEmployeeNo">사번</label>
+            <input id="newEmployeeNo" value={form.employeeNo} onChange={(e) => setForm({ ...form, employeeNo: e.target.value })} className="w-full" required />
+          </div>
+          <div>
+            <label htmlFor="newName">이름</label>
+            <input id="newName" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full" required />
+          </div>
+          <div>
+            <label htmlFor="newDepartment">부서</label>
+            <input id="newDepartment" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full" required />
+          </div>
+          <div>
+            <label htmlFor="newEmail">회사 이메일</label>
+            <input id="newEmail" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full" required />
+          </div>
+          <div>
+            <label htmlFor="newPhone">휴대폰 (선택)</label>
+            <input id="newPhone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full" />
+          </div>
+          <label className="flex items-center gap-2 pt-6 text-sm font-normal text-gray-700">
+            <input type="checkbox" checked={form.isPartner} onChange={(e) => setForm({ ...form, isPartner: e.target.checked })} className="h-4 w-4" />
+            파트너
+          </label>
+          <label className="flex items-center gap-2 pt-6 text-sm font-normal text-gray-700">
+            <input type="checkbox" checked={form.isAdmin} onChange={(e) => setForm({ ...form, isAdmin: e.target.checked })} className="h-4 w-4" />
+            관리자
+          </label>
+          <div className="flex items-center gap-3 pt-5">
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              추가
+            </button>
+          </div>
+          {formMessage && (
+            <p className={`sm:col-span-4 text-sm ${formMessage.type === "error" ? "text-red-600" : "text-green-700"}`}>{formMessage.text}</p>
+          )}
+        </form>
+        </div>
+      </details>
 
       <section className="mt-5">
         <h2 className="text-sm font-semibold text-gray-900">
           등록된 직원 {users ? `(${users.length}명)` : ""}
         </h2>
         {loadError && <p className="mt-2 text-sm text-red-600">{loadError}</p>}
+        {roleMessage && <p className="mt-2 text-sm text-red-600">{roleMessage}</p>}
         {users && (
           <div className="mt-2 overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table className="w-full min-w-[720px] text-left text-sm">
@@ -179,7 +294,19 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-2">{u.email}</td>
                     <td className="px-4 py-2">{u.phone ?? "-"}</td>
                     <td className="px-4 py-2">{u.isPartner ? "Y" : "-"}</td>
-                    <td className="px-4 py-2">{u.role === "admin" ? "관리자" : "직원"}</td>
+                    <td className="px-4 py-2">
+                      <span className={u.role === "admin" ? "font-medium text-brand-700" : ""}>{u.role === "admin" ? "관리자" : "직원"}</span>
+                      {me?.employeeNo !== u.employeeNo && (
+                        <button
+                          type="button"
+                          onClick={() => setRole(u, u.role === "admin" ? "employee" : "admin")}
+                          disabled={roleBusy === u.employeeNo}
+                          className="ml-2 text-xs text-gray-500 underline hover:text-gray-800 disabled:opacity-50"
+                        >
+                          {u.role === "admin" ? "해제" : "관리자 지정"}
+                        </button>
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-gray-500">{u.loginLinked ? "연결됨" : "첫 로그인 전"}</td>
                   </tr>
                 ))}

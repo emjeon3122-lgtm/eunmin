@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { createHmac, randomBytes } from 'crypto';
-import { AppConfig } from '../config/configuration';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 import { VendorAdapter, VendorMessagePayload, VendorTransmissionError } from './vendor-adapter.interface';
 
 // CPaaS 대행사로 Solapi(알림톡)를 최종 선정 — docs/01 section 3-2에서 미정이었던 항목이
@@ -21,20 +20,42 @@ import { VendorAdapter, VendorMessagePayload, VendorTransmissionError } from './
 // 필드를 추가로 조합해 보내는 일이 없도록 주의해야 한다.
 @Injectable()
 export class SolapiAlimtalkAdapter implements VendorAdapter {
-  private readonly apiKey: string;
-  private readonly apiSecret: string; // HMAC 서명 생성에만 쓰고 절대 요청에 노출하지 않는다.
-  private readonly senderKey: string; // Solapi 발신프로필 키(pfId)
-  private readonly senderPhone: string; // Solapi에 등록한 발신번호(SMS 대체발송 시 from)
-  private readonly apiBaseUrl: string;
-  private readonly templateId: string;
+  // 값은 호출할 때마다 연동 설정(관리자 화면 저장값 또는 .env)에서 읽는다 — 재시작 없이 바뀐다.
+  constructor(private readonly settings: IntegrationSettingsService) {}
 
-  constructor(configService: ConfigService) {
-    this.apiKey = configService.get<AppConfig['kakao']['apiKey']>('app.kakao.apiKey')!;
-    this.apiSecret = configService.get<AppConfig['kakao']['apiSecret']>('app.kakao.apiSecret')!;
-    this.senderKey = configService.get<AppConfig['kakao']['senderKey']>('app.kakao.senderKey')!;
-    this.senderPhone = configService.get<AppConfig['kakao']['senderPhone']>('app.kakao.senderPhone')!;
-    this.apiBaseUrl = configService.get<AppConfig['kakao']['apiBaseUrl']>('app.kakao.apiBaseUrl')!;
-    this.templateId = configService.get<AppConfig['kakao']['templateId']>('app.kakao.templateId')!;
+  private get cfg() {
+    return this.settings.get().vendor;
+  }
+  private get apiKey() {
+    return this.cfg.apiKey;
+  }
+  private get apiSecret() {
+    return this.cfg.apiSecret; // HMAC 서명 생성에만 쓰고 절대 요청에 노출하지 않는다.
+  }
+  private get senderKey() {
+    return this.cfg.senderKey; // Solapi 발신프로필 키(pfId)
+  }
+  private get senderPhone() {
+    return this.cfg.senderPhone; // Solapi에 등록한 발신번호(SMS 대체발송 시 from)
+  }
+  private get apiBaseUrl() {
+    return this.cfg.apiBaseUrl;
+  }
+  private get templateId() {
+    return this.cfg.templateId;
+  }
+
+  // 관리자 화면의 [연결 확인] — 잔액 조회로 키·서명이 맞는지만 본다(메시지는 보내지 않는다).
+  async checkConnection(): Promise<{ status: number; balance?: number }> {
+    if (!this.apiKey || !this.apiSecret) throw new Error('API Key / API Secret 이 비어 있습니다.');
+    const res = await fetch(`${this.apiBaseUrl}/cash/v1/balance`, {
+      headers: { Authorization: this.buildAuthHeader() },
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+    const json = (await res.json().catch(() => ({}))) as { balance?: unknown };
+    return { status: res.status, balance: typeof json.balance === 'number' ? json.balance : undefined };
   }
 
   // Solapi는 Bearer 토큰이 아니라 API Key/Secret으로 만든 HMAC-SHA256 서명을 요구한다
