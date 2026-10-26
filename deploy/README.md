@@ -3,6 +3,18 @@
 경조사 화환 신청 앱을 Synology NAS의 Container Manager(Docker)로 운영하기 위한 안내입니다.
 대상 장비: DS1019+ (linux/amd64), DSM 7.3, Container Manager.
 
+> **현재 회사 NAS는 이 문서의 compose 구성이 아니라 전산 담당자가 만든 방식으로 운영됩니다**
+> (host 네트워크, api는 `HOST=127.0.0.1`, 사내 주소 `https://192.168.100.25:7023`).
+> 업데이트는 배포 센터(`https://192.168.100.25:7070`)에 zip을 올립니다.
+> - 코드만 바뀐 버전: 바로 배포되고, 안 뜨면 자동으로 되돌립니다.
+> - `apps/api/prisma/migrations`(DB 변경)가 든 버전: 자동 반려되므로 zip을 전산 담당자에게 전달합니다(DB 백업 후 배포).
+> - zip에는 `node_modules`·`.next`·`dist`를 넣지 않고, `docker-entrypoint.sh`는 LF 줄바꿈을 유지합니다
+>   (`git archive`로 만들면 둘 다 지켜집니다).
+>
+> 외부 연동 값(Microsoft 365·Solapi·Claude)은 `.env` 대신 관리자 화면 **설정 > 외부 연동**에서
+> 입력할 수 있고, `DATA_DIR/settings/integrations.enc`에 암호화 저장되어 `.env`보다 우선합니다.
+> 아래 내용은 compose로 새로 설치할 때의 참고 자료입니다.
+
 ## 1. 구성
 
 ```

@@ -31,6 +31,37 @@ function clientKey(req: Request): string {
   return first || req.ip || 'unknown';
 }
 
+// 임시 관리자 로그인 실패 제한 — 주소별(빠른 재시도 차단)과 계정 전체(주소를 바꿔 가며 시도 차단).
+const PER_CLIENT_LIMIT = { maxFailures: 5, windowMs: 60_000, lockMs: 60_000 };
+const ACCOUNT_LIMIT = { maxFailures: 20, windowMs: 15 * 60_000, lockMs: 15 * 60_000 };
+const MAX_TRACKED_CLIENTS = 1000;
+
+interface FailureRecord {
+  count: number;
+  since: number;
+  until: number;
+}
+
+function isLocked(f: FailureRecord | undefined): boolean {
+  return !!f && f.until > Date.now();
+}
+
+// 정해진 시간(windowMs) 안에 maxFailures번 틀리면 lockMs 동안 막는다.
+function countFailure(
+  prev: FailureRecord | undefined,
+  limit: { maxFailures: number; windowMs: number; lockMs: number },
+): FailureRecord {
+  const now = Date.now();
+  const f = !prev || now - prev.since > limit.windowMs ? { count: 0, since: now, until: prev?.until ?? 0 } : { ...prev };
+  f.count += 1;
+  if (f.count >= limit.maxFailures) {
+    f.until = now + limit.lockMs;
+    f.count = 0;
+    f.since = now;
+  }
+  return f;
+}
+
 const COOKIE_NAME = 'token';
 const OIDC_TX_COOKIE = 'oidc_tx';
 const OIDC_COOKIE_PATH = '/api/auth/oidc';
@@ -75,19 +106,21 @@ export class AuthController {
   }
 
   // 임시 관리자(아이디+비밀번호) 로그인 — SSO 연동 전까지만 쓰고 관리자 화면에서 지운다.
-  // 무차별 대입을 늦추려고 같은 주소에서 5번 틀리면 1분간 막는다.
+  // 무차별 대입을 늦추려고 같은 주소에서 5번 틀리면 1분간 막는다. 주소(X-Forwarded-For)는
+  // 요청하는 쪽이 꾸며낼 수 있으므로, 주소와 상관없이 계정 전체로도 15분에 20번 틀리면 15분간 막는다.
   @Post('local-login')
   async localLogin(@Body() dto: LocalLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     if (!this.settings.localLoginEnabled()) {
       throw new NotFoundException();
     }
     const key = clientKey(req);
-    if (this.isLocked(key)) {
-      throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_ATTEMPTS', '로그인 시도가 너무 많습니다. 1분 뒤 다시 시도하세요.');
+    if (isLocked(this.failures.get(key)) || isLocked(this.accountFailures)) {
+      throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_ATTEMPTS', '로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도하세요.');
     }
     const result = await this.authService.localLogin(dto.id.trim(), dto.password);
     if (!result) {
-      this.recordFailure(key);
+      this.recordClientFailure(key);
+      this.accountFailures = countFailure(this.accountFailures, ACCOUNT_LIMIT);
       this.logger.warn(`임시 관리자 로그인 실패 (${key})`);
       throw new UnauthorizedApiException('아이디 또는 비밀번호가 올바르지 않습니다.');
     }
@@ -97,21 +130,20 @@ export class AuthController {
     return { token: result.token };
   }
 
-  private readonly failures = new Map<string, { count: number; until: number }>();
+  // 주소별 실패 기록과, 주소와 무관한 계정 전체 실패 기록(정리 대상이 아니라 따로 둔다).
+  private readonly failures = new Map<string, FailureRecord>();
+  private accountFailures: FailureRecord | undefined;
 
-  private isLocked(key: string): boolean {
-    const f = this.failures.get(key);
-    return !!f && f.until > Date.now();
-  }
-
-  private recordFailure(key: string) {
-    const f = this.failures.get(key) ?? { count: 0, until: 0 };
-    f.count += 1;
-    if (f.count >= 5) {
-      f.until = Date.now() + 60_000;
-      f.count = 0;
+  private recordClientFailure(key: string) {
+    // 꾸며낸 주소로 기록을 무한히 늘리지 못하게, 많이 쌓이면 끝난 기록부터 정리한다.
+    if (this.failures.size >= MAX_TRACKED_CLIENTS) {
+      const now = Date.now();
+      for (const [k, v] of this.failures) {
+        if (v.until <= now && now - v.since > PER_CLIENT_LIMIT.windowMs) this.failures.delete(k);
+      }
+      if (this.failures.size >= MAX_TRACKED_CLIENTS) this.failures.clear();
     }
-    this.failures.set(key, f);
+    this.failures.set(key, countFailure(this.failures.get(key), PER_CLIENT_LIMIT));
   }
 
   // 사번만으로 로그인하는 개발용 경로 — 운영에서는 ALLOW_DEV_LOGIN=true가 아니면 404.

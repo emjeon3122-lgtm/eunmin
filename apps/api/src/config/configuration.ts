@@ -87,7 +87,8 @@ export default (): { app: AppConfig } => {
       storageDriver: (process.env.STORAGE_DRIVER as 'local') ?? 'local',
       storageLocalDir,
       settingsFile:
-        process.env.SETTINGS_FILE ?? join(dirname(resolve(storageLocalDir)), 'settings', 'integrations.enc'),
+        // .env.example 처럼 빈 값(SETTINGS_FILE="")으로 두어도 기본 경로를 쓰도록 ?? 가 아니라 || 로 고른다.
+        process.env.SETTINGS_FILE || join(dirname(resolve(storageLocalDir)), 'settings', 'integrations.enc'),
       settingsEncryptionKey: process.env.SETTINGS_ENCRYPTION_KEY ?? '',
       fileUrlTtlSeconds: parseInt(process.env.FILE_URL_TTL_SECONDS ?? '43200', 10),
       invitationParser: (process.env.INVITATION_PARSER as 'mock' | 'claude') ?? 'mock',

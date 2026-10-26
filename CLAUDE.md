@@ -31,6 +31,23 @@ This repo holds two unrelated things:
    Uploaded files are never public: APIs that already checked access (own request detail,
    admin detail, florist token page) return short-lived HMAC-signed `/api/files/...` URLs
    (`storage/file-url.service.ts`); DB rows keep the bare `/uploads/<uuid>.<ext>` path.
+   **The company NAS itself is run by IT their own way, not with `deploy/docker-compose.yml`**: host
+   networking with the API bound to `HOST=127.0.0.1`, internal URL `https://192.168.100.25:7023`,
+   updates uploaded as a zip to IT's deploy center (`https://192.168.100.25:7070`). Code-only zips
+   auto-deploy (auto-rollback if unhealthy); zips containing new Prisma migrations are rejected and
+   must go to IT (DB backup first). Build the zip with `git archive` (no `node_modules`/`.next`/`dist`,
+   keeps `docker-entrypoint.sh` LF). Keep the cookie names (`token`, `oidc_tx`, `wreath_*`) — they must
+   not collide with another company dashboard on the same host.
+   Integration values (OIDC, Solapi, Anthropic) can also be set by admins at 설정 > 외부 연동
+   (`settings/integration-settings.service.ts`): stored AES-256-GCM encrypted in
+   `DATA_DIR/settings/integrations.enc` (key = `SETTINGS_ENCRYPTION_KEY` or derived from `JWT_SECRET`),
+   overriding `.env`, applied without restart — so services read `IntegrationSettingsService.get()`
+   per request instead of caching config. Secrets are never returned in full (masked hints only).
+   A temporary admin password login (`/api/auth/local-login`, scrypt hash in that file) exists only
+   while an admin has created one there; it is rate-limited per address and account-wide (the
+   address comes from spoofable `X-Forwarded-For`, so the account-wide lock is what matters).
+   Admins can also add one employee, toggle admin role, and search/add Entra users via Microsoft
+   Graph (`admin/directory.service.ts`, needs application permission `User.Read.All`).
    Server-side fetches of user-supplied URLs (invitation auto-fill, `INVITATION_PARSER=claude`)
    must go through `common/safe-fetch.ts`, which blocks private/loopback/link-local addresses at
    connect time (DNS-rebinding safe), re-checks every redirect, and allows only ports 80/443.
