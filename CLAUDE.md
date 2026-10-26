@@ -8,10 +8,10 @@ This repo holds two unrelated things:
 
 1. **경조사 화환 자동 발송 앱** (`apps/api`, `apps/web`, `docs/`) — the main project. See
    [`README.md`](./README.md) for how to run it and [`docs/`](./docs) for the full design spec
-   (architecture/DB, API, frontend wireframes, backend integration). Backend is NestJS + Prisma +
+   (architecture/DB, API, frontend wireframes, backend integration). Backend is NestJS 12 + Prisma 5 +
    SQLite (single file at `apps/api/prisma/dev.db` — no DB server, no Docker; Prisma enums are
    unsupported on SQLite so they live in `apps/api/src/common/enums.ts` as const objects);
-   frontend is Next.js 14 (App Router). Login is Microsoft 365 (Entra ID) via standard OIDC +
+   frontend is Next.js 16 (App Router, React 19). Login is Microsoft 365 (Entra ID) via standard OIDC +
    PKCE (`apps/api/src/auth/oidc.service.ts`, `AUTH_MODE=oidc`); users are matched to the `users`
    table by company email on first login, then by `ssoSubjectId` (`oidc:<oid>`), and unknown
    accounts are rejected. The roster is maintained by admins via Excel round-trip at

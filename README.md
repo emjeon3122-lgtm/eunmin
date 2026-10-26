@@ -16,8 +16,8 @@
 
 ```
 apps/
-  api/   NestJS + Prisma + SQLite — REST API 서버
-  web/   Next.js 14 (App Router) — 반응형 웹 클라이언트
+  api/   NestJS 12 + Prisma 5 + SQLite — REST API 서버
+  web/   Next.js 16 (App Router, React 19) — 반응형 웹 클라이언트
 deploy/  운영 배포(Synology NAS + Docker + Cloudflare Tunnel) — deploy/README.md 참고
 ```
 
