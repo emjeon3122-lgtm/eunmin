@@ -4,6 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { BlockedUrlError, fetchPublicText } from '../common/safe-fetch';
 import { IntegrationSettingsService } from '../settings/integration-settings.service';
+import { InvitationParserAlertService } from './invitation-parser-alert.service';
 import { InvitationParserAdapter, ParsedInvitationFields } from './invitation-parser.interface';
 
 // 모바일 청첩장/부고장에서 배송 정보를 뽑아내는 실제 구현체.
@@ -55,7 +56,10 @@ export class ClaudeInvitationParserAdapter implements InvitationParserAdapter {
   private cached: { apiKey: string; client: Anthropic } | null = null;
 
   // 키·모델은 호출할 때마다 연동 설정(관리자 화면 저장값 또는 .env)에서 읽는다.
-  constructor(private readonly settings: IntegrationSettingsService) {}
+  constructor(
+    private readonly settings: IntegrationSettingsService,
+    private readonly alerts: InvitationParserAlertService,
+  ) {}
 
   private get model(): string {
     return this.settings.get().invitationParser.model;
@@ -134,6 +138,8 @@ export class ClaudeInvitationParserAdapter implements InvitationParserAdapter {
         output_config: { format: zodOutputFormat(InvitationSchema) },
       });
 
+      // 호출이 성공했으면(형식 해석과 무관하게) 크레딧·키·모델은 정상이다.
+      this.alerts.reportSuccess();
       const parsed = response.parsed_output;
       if (!parsed) {
         this.logger.warn('모델 응답을 정해진 형식으로 해석하지 못했습니다.');
@@ -150,7 +156,9 @@ export class ClaudeInvitationParserAdapter implements InvitationParserAdapter {
       };
     } catch (err) {
       // 자동 채우기는 어디까지나 보조 기능이라, 실패해도 신청 흐름을 막지 않는다.
+      // 다만 크레딧·키·모델 문제라면 관리자가 알 수 있게 알림을 남긴다(하루 한 번).
       this.logger.error(`자동 채우기 추출에 실패했습니다: ${String(err)}`);
+      await this.alerts.reportFailure(err);
       return {};
     }
   }

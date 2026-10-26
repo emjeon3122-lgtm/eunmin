@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AttachmentsModule } from '../attachments/attachments.module';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { IntegrationSettingsService } from '../settings/integration-settings.service';
 import { InvitationParserController } from './invitation-parser.controller';
 import { ClaudeInvitationParserAdapter } from './claude-invitation-parser.adapter';
+import { InvitationParserAlertService } from './invitation-parser-alert.service';
 import { MockInvitationParserAdapter } from './mock-invitation-parser.adapter';
 import { INVITATION_PARSER, InvitationParserAdapter } from './invitation-parser.interface';
 
@@ -15,11 +17,12 @@ import { INVITATION_PARSER, InvitationParserAdapter } from './invitation-parser.
 // 외부로 나가지 않는다. 켜져 있어도 키가 없으면 Mock으로 동작한다(요청마다 인증 오류를
 // 내는 것보다 낫다 — 화면의 "현재 적용" 표시로 알 수 있다).
 @Module({
-  imports: [AuthModule, AttachmentsModule],
+  imports: [AuthModule, AttachmentsModule, NotificationsModule],
   controllers: [InvitationParserController],
   providers: [
     MockInvitationParserAdapter,
     ClaudeInvitationParserAdapter,
+    InvitationParserAlertService,
     {
       provide: INVITATION_PARSER,
       inject: [IntegrationSettingsService, MockInvitationParserAdapter, ClaudeInvitationParserAdapter],

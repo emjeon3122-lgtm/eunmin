@@ -56,6 +56,10 @@ This repo holds two unrelated things:
    Server-side fetches of user-supplied URLs (invitation auto-fill, `INVITATION_PARSER=claude`)
    must go through `common/safe-fetch.ts`, which blocks private/loopback/link-local addresses at
    connect time (DNS-rebinding safe), re-checks every redirect, and allows only ports 80/443.
+   When an auto-fill call fails for an admin-fixable reason (credit/billing, key expired/revoked,
+   bad model name), `invitation-parser/invitation-parser-alert.service.ts` posts an in-app
+   notification to all admins — at most once per reason per 24h, reset by the next successful call;
+   transient errors (overload, network, rate limit) don't alert.
    Local development still needs no Docker (`run_local_test.bat` / `npm run dev`).
 2. `pet_widget.py` / `run_pet_widget.bat` — an unrelated, standalone Windows-only desktop pet
    widget (stdlib-only: `tkinter` + `ctypes.windll`) that follows the system mouse cursor around
