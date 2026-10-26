@@ -33,10 +33,10 @@ import type { ParsedInvitationFields, User } from "@/lib/types";
 const schema = z
   .object({
     requestType: z.enum(["self", "existing_client", "prospective_client"], {
-      required_error: "발송 대상을 선택해주세요.",
+      error: "발송 대상을 선택해주세요.",
     }),
     occasionType: z.enum(["wedding", "funeral", "opening", "promotion", "etc"], {
-      required_error: "경조사 유형을 선택해주세요.",
+      error: "경조사 유형을 선택해주세요.",
     }),
     orchidType: z.enum(["oriental", "western"]).optional(),
     // register()로 연결한 라디오 그룹은 아무것도 체크되지 않으면 react-hook-form이
