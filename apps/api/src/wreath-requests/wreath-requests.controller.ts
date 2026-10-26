@@ -3,17 +3,27 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/jwt.types';
-import { CreateWreathRequestDto } from './dto/create-wreath-request.dto';
+import { CreateWreathRequestDto, DuplicateCheckDto } from './dto/create-wreath-request.dto';
+import { DuplicateCheckService } from './duplicate-check.service';
 import { WreathRequestsService } from './wreath-requests.service';
 
 @Controller('wreath-requests')
 @UseGuards(JwtAuthGuard)
 export class WreathRequestsController {
-  constructor(private readonly wreathRequestsService: WreathRequestsService) {}
+  constructor(
+    private readonly wreathRequestsService: WreathRequestsService,
+    private readonly duplicates: DuplicateCheckService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateWreathRequestDto, @CurrentUser() user: AuthenticatedUser) {
     return this.wreathRequestsService.create(dto, user.id);
+  }
+
+  // 신청서 마지막 단계 전에 같은 경조사 신청이 이미 있는지 미리 확인한다(제출 때도 다시 확인).
+  @Post('duplicate-check')
+  duplicateCheck(@Body() dto: DuplicateCheckDto) {
+    return this.duplicates.check({ ...dto, desiredArrivalAt: new Date(dto.desiredArrivalAt) });
   }
 
   @Get()

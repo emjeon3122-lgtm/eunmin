@@ -93,6 +93,8 @@ export interface AdminWreathRequestListItem extends WreathRequestListItem {
   requesterName: string;
   department: string;
   requiresPreApproval: boolean;
+  // 같은 장소·같은 날 다른 신청이 있는지 — same_event: 같은 경조사로 보임, same_place: 장소·날짜만 같음
+  duplicateFlag?: "same_event" | "same_place" | null;
 }
 
 export interface OrderTransmission {
@@ -111,6 +113,39 @@ export interface AdminWreathRequestDetail extends WreathRequestDetail {
   attachmentFileName?: string | null;
   adminOverrideNote?: string | null;
   orderTransmissions?: OrderTransmission[];
+  relatedRequests?: RelatedRequest[];
+}
+
+// 관리자 상세 — 같은 장소·같은 날의 다른 신청
+export interface RelatedRequest {
+  id: string;
+  requesterName: string;
+  department: string;
+  status: WreathStatus;
+  createdAt: string;
+  recipientName: string;
+  clientName: string | null;
+  sameEvent: boolean;
+  externalAudit: boolean;
+}
+
+// POST /api/wreath-requests/duplicate-check — 신청서 마지막 단계의 중복 확인
+export interface DuplicateMatch {
+  id: string;
+  requesterName: string;
+  department: string;
+  createdAt: string;
+  occasionType: OccasionType;
+  deliveryDetail: string | null;
+  desiredArrivalAt: string;
+  sameEvent: boolean;
+  recipientName: string | null;
+  externalAudit: boolean;
+}
+
+export interface DuplicateCheckResult {
+  blocked: boolean;
+  matches: DuplicateMatch[];
 }
 
 export interface Product {

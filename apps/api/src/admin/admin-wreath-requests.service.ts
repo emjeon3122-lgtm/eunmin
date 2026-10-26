@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WreathRequestsService } from '../wreath-requests/wreath-requests.service';
+import { DuplicateCheckService } from '../wreath-requests/duplicate-check.service';
 import { FileUrlService } from '../storage/file-url.service';
 import { InvalidStatusTransitionException, NotFoundApiException } from '../common/exceptions/api.exception';
 import { statusLabel } from '../common/status-label';
@@ -16,6 +17,7 @@ export class AdminWreathRequestsService {
     private readonly notificationsService: NotificationsService,
     private readonly wreathRequestsService: WreathRequestsService,
     private readonly fileUrls: FileUrlService,
+    private readonly duplicates: DuplicateCheckService,
   ) {}
 
   // GET /api/admin/wreath-requests — filterable per the doc 03 section 2-4 wireframe.
@@ -53,6 +55,10 @@ export class AdminWreathRequestsService {
           cancelledReason: true,
           adminOverrideNote: true,
           createdAt: true,
+          // 중복 의심 표시 계산용(같은 장소·같은 날·받는 분/고객사)
+          desiredArrivalAt: true,
+          clientName: true,
+          contractType: true,
           requester: { select: { name: true, department: true, employeeNo: true } },
         },
       }),
@@ -60,8 +66,10 @@ export class AdminWreathRequestsService {
     ]);
     // Flatten requester.{name,department} to top-level requesterName/department
     // to match the admin detail endpoint's shape (and the doc 03 §2-4 table columns).
+    const flags = await this.duplicates.flagsFor(items);
     const flattened = items.map(({ requester, ...rest }) => ({
       ...rest,
+      duplicateFlag: flags.get(rest.id) ?? null,
       requesterName: requester.name,
       department: requester.department,
       requesterEmployeeNo: requester.employeeNo,
@@ -82,12 +90,13 @@ export class AdminWreathRequestsService {
       throw new NotFoundApiException('신청을 찾을 수 없습니다.');
     }
 
-    const [detail, transmissions] = await Promise.all([
+    const [detail, transmissions, relatedRequests] = await Promise.all([
       this.wreathRequestsService.toDetail(request),
       this.prisma.orderTransmission.findMany({
         where: { requestId: id },
         orderBy: { attemptedAt: 'desc' },
       }),
+      this.duplicates.relatedTo(id),
     ]);
 
     return {
@@ -96,6 +105,8 @@ export class AdminWreathRequestsService {
       department: request.requester.department,
       attachmentUrl: this.fileUrls.sign(request.attachment?.fileUrl),
       attachmentFileName: request.attachment?.fileName ?? null,
+      // 같은 장소·같은 날의 다른 신청(중복 확인용)
+      relatedRequests,
       orderTransmissions: transmissions.map((t) => ({
         id: t.id,
         channel: t.channel,
@@ -158,7 +169,8 @@ export class AdminWreathRequestsService {
         ...(dto.status === 'completed'
           ? { completedAt: new Date(), vendorStatusToken: null }
           : {}),
-        adminOverrideNote: dto.note,
+        // 예전 메모(중복 예외 접수 사유 등)를 지우지 않고 아래에 덧붙인다.
+        adminOverrideNote: request.adminOverrideNote ? `${request.adminOverrideNote}\n${dto.note}` : dto.note,
       },
     });
     await this.notificationsService.notifyRequester(

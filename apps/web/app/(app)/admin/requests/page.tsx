@@ -134,6 +134,12 @@ export default function AdminRequestsPage() {
                   <td className="px-4 py-3">{r.requiresPreApproval ? "✓ 첨부됨" : "불필요"}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={r.status} />
+                    {r.duplicateFlag === "same_event" && (
+                      <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">중복 의심</span>
+                    )}
+                    {r.duplicateFlag === "same_place" && (
+                      <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">같은 장소·날짜</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/admin/requests/${r.id}`} className="text-brand-600 hover:underline">

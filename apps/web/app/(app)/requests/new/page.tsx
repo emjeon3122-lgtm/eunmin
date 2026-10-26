@@ -28,7 +28,8 @@ import {
   SEND_REASON_PLACEHOLDER,
   costCodeDefaultFor,
 } from "@/lib/wizard-defaults";
-import type { ParsedInvitationFields, User } from "@/lib/types";
+import type { DuplicateCheckResult, ParsedInvitationFields, User } from "@/lib/types";
+import { DuplicateNotice } from "@/components/wizard/DuplicateNotice";
 
 const schema = z
   .object({
@@ -130,6 +131,10 @@ export default function NewWreathRequestPage() {
   // 접수되지 않도록 서버가 이 값으로 한 건으로 묶는다(꽃집 알림톡도 한 번만 발송).
   const [clientRequestId] = useState(() => crypto.randomUUID());
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // 같은 경조사 중복 확인(4단계 → 5단계로 넘어갈 때). 결과에 따라 확인 체크 또는 관리자 예외 사유가 필요하다.
+  const [duplicate, setDuplicate] = useState<DuplicateCheckResult | null>(null);
+  const [duplicateAck, setDuplicateAck] = useState(false);
+  const [duplicateReason, setDuplicateReason] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -237,9 +242,29 @@ export default function NewWreathRequestPage() {
         setError("weddingSide", { message: "신랑측/신부측을 선택해주세요." });
         return;
       }
+      await checkDuplicate(v);
     }
 
     setStep((s) => s + 1);
+  }
+
+  // 확인에 실패해도(네트워크 등) 신청은 막지 않는다 — 제출할 때 서버가 다시 확인한다.
+  async function checkDuplicate(v: FormValues) {
+    setDuplicateAck(false);
+    setDuplicateReason("");
+    try {
+      const isClient = v.requestType === "existing_client";
+      const res = await apiPost<{ data: DuplicateCheckResult }>("/wreath-requests/duplicate-check", {
+        deliveryAddress: v.deliveryAddress,
+        desiredArrivalAt: `${v.desiredArrivalAt}:00+09:00`,
+        recipientName: v.recipientName,
+        clientName: isClient ? v.clientName : undefined,
+        contractType: isClient ? v.contractType : undefined,
+      });
+      setDuplicate(res.data);
+    } catch {
+      setDuplicate(null);
+    }
   }
 
   function goBack() {
@@ -285,9 +310,17 @@ export default function NewWreathRequestPage() {
         invitationAttachmentIds: invitationAttachmentIds.length ? invitationAttachmentIds : undefined,
         attachmentId: proofAttachmentId,
         clientRequestId,
+        acknowledgeDuplicate: duplicateAck || undefined,
+        duplicateOverrideReason: duplicate?.blocked && isAdmin ? duplicateReason.trim() : undefined,
       });
       router.push(`/requests/${res.data.id}`);
     } catch (err) {
+      // 화면을 연 사이 다른 사람이 같은 경조사를 먼저 신청한 경우 — 최신 상태로 다시 보여 준다.
+      if (err instanceof ApiError && (err.code === "DUPLICATE_WARNING" || err.code === "DUPLICATE_BLOCKED")) {
+        await checkDuplicate(values);
+        setSubmitError(err.message);
+        return;
+      }
       if (err instanceof ApiError && err.code === "PRE_APPROVAL_ATTACHMENT_REQUIRED") {
         setSubmitError(err.message);
         setStep(1);
@@ -298,6 +331,11 @@ export default function NewWreathRequestPage() {
   }
 
   const values = getValues();
+  const isAdmin = user?.role === "admin";
+  const duplicateUnresolved =
+    !!duplicate &&
+    duplicate.matches.length > 0 &&
+    (duplicate.blocked ? !isAdmin || !duplicateReason.trim() : !duplicateAck);
   const canProceedStep1 = !!user && (user.isPartner || !!proofAttachmentId);
 
   if (loadError) return <p className="text-sm text-red-600">{loadError}</p>;
@@ -669,6 +707,17 @@ export default function NewWreathRequestPage() {
               )}
             </dl>
 
+            {duplicate && (
+              <DuplicateNotice
+                result={duplicate}
+                isAdmin={isAdmin}
+                acknowledged={duplicateAck}
+                onAcknowledge={setDuplicateAck}
+                overrideReason={duplicateReason}
+                onOverrideReason={setDuplicateReason}
+              />
+            )}
+
             {submitError && <p className="text-sm text-red-600">{submitError}</p>}
 
             <div className="flex justify-between pt-2">
@@ -685,7 +734,7 @@ export default function NewWreathRequestPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || duplicateUnresolved}
                   className="rounded-md bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSubmitting ? "제출 중..." : "신청"}

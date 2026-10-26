@@ -5,11 +5,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SendToVendorService } from '../jobs/send-to-vendor.service';
 import { FileUrlService } from '../storage/file-url.service';
 import {
+  DuplicateBlockedException,
+  DuplicateWarningException,
   InvalidStatusTransitionException,
   NotFoundApiException,
   PreApprovalAttachmentRequiredException,
 } from '../common/exceptions/api.exception';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateWreathRequestDto } from './dto/create-wreath-request.dto';
+import { DuplicateCheckService } from './duplicate-check.service';
 
 // docs/04-backend-integration.md section 3 — 추측 불가능한 43자 URL-safe 토큰.
 function generateVendorStatusToken(): string {
@@ -24,6 +28,8 @@ export class WreathRequestsService {
     private readonly prisma: PrismaService,
     private readonly sendToVendorService: SendToVendorService,
     private readonly fileUrls: FileUrlService,
+    private readonly duplicates: DuplicateCheckService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // docs/02-api-spec.md section 3-1 + docs/04 section 3.
@@ -43,6 +49,34 @@ export class WreathRequestsService {
       throw new PreApprovalAttachmentRequiredException(
         '파트너 승인 증빙을 첨부해 주세요.',
       );
+    }
+
+    // 같은 경조사 중복 신청 확인 — 화면에서 미리 보여 주지만, 우회할 수 없게 여기서 다시 막는다.
+    const desiredArrivalAt = new Date(dto.desiredArrivalAt);
+    const duplicate = await this.duplicates.check({
+      deliveryAddress: dto.deliveryAddress,
+      desiredArrivalAt,
+      recipientName: dto.recipientName,
+      clientName: dto.clientName,
+      contractType: dto.contractType,
+    });
+    const overrideReason = dto.duplicateOverrideReason?.trim();
+    let overrideNote: string | null = null;
+    if (duplicate.blocked) {
+      const first = duplicate.matches.find((m) => m.sameEvent)!;
+      if (requester.role !== 'admin') {
+        throw new DuplicateBlockedException(
+          `외부감사 고객사 경조사는 한 건만 발송할 수 있습니다. 이미 ${first.department} ${first.requesterName} 님이 신청했습니다. ` +
+            '꼭 필요하면 관리자에게 문의해 주세요.',
+        );
+      }
+      if (!overrideReason) {
+        throw new DuplicateBlockedException('외부감사 고객사 중복 신청입니다. 예외로 접수하려면 사유를 입력해 주세요.');
+      }
+      const at = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      overrideNote = `[중복 예외 접수] ${overrideReason} — ${requester.name}(${requester.employeeNo}), ${at}`;
+    } else if (duplicate.matches.length > 0 && !dto.acknowledgeDuplicate) {
+      throw new DuplicateWarningException('같은 장소·같은 날 이미 신청된 건이 있습니다. 내용을 확인한 뒤 다시 신청해 주세요.');
     }
 
     let vendorId: string | null = null;
@@ -74,7 +108,7 @@ export class WreathRequestsService {
           ordererPhone: dto.ordererPhone,
           deliveryAddress: dto.deliveryAddress,
           deliveryDetail: dto.deliveryDetail,
-          desiredArrivalAt: new Date(dto.desiredArrivalAt),
+          desiredArrivalAt,
           ribbonMessage: dto.ribbonMessage,
           ribbonSenderText: dto.ribbonSenderText,
           declaredAmount: dto.declaredAmount ?? null,
@@ -91,6 +125,7 @@ export class WreathRequestsService {
           vendorId,
           productId: dto.productId ?? null,
           vendorStatusToken: generateVendorStatusToken(),
+          adminOverrideNote: overrideNote,
         },
       });
     } catch (err) {
@@ -100,6 +135,14 @@ export class WreathRequestsService {
         if (winner) return toCreateResponse(winner);
       }
       throw err;
+    }
+
+    // 외부감사 중복을 예외로 접수했으면 다른 관리자도 알 수 있게 남긴다.
+    if (overrideNote) {
+      await this.notifications.notifyAdmins(
+        request.id,
+        `${requester.department} ${requester.name} 님이 외부감사 고객사 중복 신청을 예외로 접수했습니다. 사유: ${overrideReason}`,
+      );
     }
 
     // 청첩장 사진은 자동 채우기 단계에서 이미 저장돼 있으므로 신청서에 연결만 한다.

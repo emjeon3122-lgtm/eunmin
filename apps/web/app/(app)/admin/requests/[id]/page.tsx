@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiGet, apiPatch, apiPost, ApiError, resolveFileUrl } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -164,6 +165,33 @@ export default function AdminWreathRequestDetailPage() {
         </section>
       )}
 
+      {request.relatedRequests && request.relatedRequests.length > 0 && (
+        <section className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <h2 className="text-sm font-semibold text-amber-900">
+            같은 장소·같은 날 다른 신청 ({request.relatedRequests.length}건)
+          </h2>
+          <ul className="mt-2 space-y-1.5 text-sm">
+            {request.relatedRequests.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded bg-white px-3 py-2">
+                <span className="font-medium text-gray-900">
+                  {r.department} {r.requesterName}
+                </span>
+                <span className="text-gray-600">
+                  받는 분 {r.recipientName}
+                  {r.clientName ? ` · ${r.clientName}` : ""} · 접수 {formatDateTime(r.createdAt)}
+                </span>
+                {r.sameEvent && <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">같은 경조사로 보임</span>}
+                {r.externalAudit && <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">외부감사</span>}
+                <StatusBadge status={r.status} />
+                <Link href={`/admin/requests/${r.id}`} className="ml-auto text-brand-600 hover:underline">
+                  상세
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="mt-6">
         <h2 className="text-sm font-semibold text-gray-900">알림톡 발송 로그</h2>
         <div className="mt-2 overflow-x-auto rounded-lg border border-gray-200 bg-white">
@@ -289,7 +317,7 @@ function Row({ label, value, valueNode }: { label: string; value: string; valueN
   return (
     <div className="grid grid-cols-3 gap-2 px-4 py-3">
       <dt className="text-gray-500">{label}</dt>
-      <dd className="col-span-2 text-gray-900">{valueNode ?? value}</dd>
+      <dd className="col-span-2 whitespace-pre-line text-gray-900">{valueNode ?? value}</dd>
     </div>
   );
 }

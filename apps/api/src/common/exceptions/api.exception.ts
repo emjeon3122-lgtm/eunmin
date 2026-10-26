@@ -36,3 +36,17 @@ export class UnauthorizedApiException extends ApiException {
     super(HttpStatus.UNAUTHORIZED, 'UNAUTHORIZED', message);
   }
 }
+
+// 외부감사 고객사의 같은 경조사 신청이 이미 있어 접수할 수 없음(관리자는 사유를 적고 예외 접수 가능).
+export class DuplicateBlockedException extends ApiException {
+  constructor(message: string) {
+    super(HttpStatus.CONFLICT, 'DUPLICATE_BLOCKED', message);
+  }
+}
+
+// 같은 장소·같은 날 신청이 이미 있어 신청자의 확인이 필요함.
+export class DuplicateWarningException extends ApiException {
+  constructor(message: string) {
+    super(HttpStatus.CONFLICT, 'DUPLICATE_WARNING', message);
+  }
+}

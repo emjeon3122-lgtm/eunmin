@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -9,6 +10,7 @@ import {
   IsString,
   IsUrl,
   IsUUID,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
@@ -122,4 +124,37 @@ export class CreateWreathRequestDto {
   @IsOptional()
   @IsUUID()
   attachmentId?: string | null;
+
+  // 같은 장소·같은 날 신청이 이미 있다는 경고를 신청자가 확인했는지(duplicate-check.service.ts).
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeDuplicate?: boolean;
+
+  // 외부감사 고객사 중복으로 막힌 신청을 관리자가 예외로 접수할 때의 사유(관리자만 유효).
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  duplicateOverrideReason?: string;
+}
+
+// POST /api/wreath-requests/duplicate-check — 신청서 마지막 단계 전에 중복 후보를 미리 보여 준다.
+export class DuplicateCheckDto {
+  @IsString()
+  @MinLength(1)
+  deliveryAddress!: string;
+
+  @IsDateString()
+  desiredArrivalAt!: string;
+
+  @IsString()
+  @MinLength(1)
+  recipientName!: string;
+
+  @IsOptional()
+  @IsString()
+  clientName?: string;
+
+  @IsOptional()
+  @IsEnum(ContractType)
+  contractType?: ContractType;
 }

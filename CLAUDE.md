@@ -60,6 +60,13 @@ This repo holds two unrelated things:
    bad model name), `invitation-parser/invitation-parser-alert.service.ts` posts an in-app
    notification to all admins — at most once per reason per 24h, reset by the next successful call;
    transient errors (overload, network, rate limit) don't alert.
+   Duplicate orders for the same event (`wreath-requests/duplicate-check.service.ts`): same normalized
+   delivery address + same KST day = same place; plus same recipient or client name (ignoring `(주)`,
+   `주식회사`, spaces) = same event. If either side of a same-event match is `contractType=external_audit`
+   the order is blocked (admins may override with a reason, stored by prefixing `adminOverrideNote`,
+   which manual status changes now append to rather than overwrite); otherwise the requester must
+   tick an acknowledgement (`acknowledgeDuplicate`). Enforced in `create()`, previewed via
+   `POST /api/wreath-requests/duplicate-check`, flagged in the admin list/detail. Cancelled/draft ignored.
    Local development still needs no Docker (`run_local_test.bat` / `npm run dev`).
 2. `pet_widget.py` / `run_pet_widget.bat` — an unrelated, standalone Windows-only desktop pet
    widget (stdlib-only: `tkinter` + `ctypes.windll`) that follows the system mouse cursor around
