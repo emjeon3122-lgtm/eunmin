@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 import { AppConfig } from '../config/configuration';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -15,7 +15,10 @@ import { RolesGuard } from './roles.guard';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<AppConfig['jwtSecret']>('app.jwtSecret'),
-        signOptions: { expiresIn: config.get<AppConfig['jwtExpiresIn']>('app.jwtExpiresIn') },
+        // JWT_EXPIRES_IN(예: "8h")은 ms 형식 문자열 — 라이브러리 타입에 맞춰 변환한다.
+        signOptions: {
+          expiresIn: config.get<AppConfig['jwtExpiresIn']>('app.jwtExpiresIn') as JwtSignOptions['expiresIn'],
+        },
       }),
     }),
   ],

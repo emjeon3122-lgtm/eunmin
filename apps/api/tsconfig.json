@@ -10,9 +10,12 @@
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
+    // TypeScript 6부터 strict 기본값이 켜지고 전역 타입(@types/*)을 자동으로 불러오지 않는다 —
+    // 예전과 같은 동작을 유지하려고 명시한다(Express.Multer 타입은 @types/multer가 전역으로 추가).
+    "strict": false,
+    "types": ["node", "multer"],
     "strictNullChecks": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
