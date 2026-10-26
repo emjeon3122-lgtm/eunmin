@@ -36,7 +36,12 @@ This repo holds two unrelated things:
    updates uploaded as a zip to IT's deploy center (`https://192.168.100.25:7070`). Code-only zips
    auto-deploy (auto-rollback if unhealthy); zips containing new Prisma migrations are rejected and
    must go to IT (DB backup first). Build the zip with `git archive` (no `node_modules`/`.next`/`dist`,
-   keeps `docker-entrypoint.sh` LF). Keep the cookie names (`token`, `oidc_tx`, `wreath_*`) — they must
+   keeps `docker-entrypoint.sh` LF). The deploy center also replaces the zip's Dockerfiles/compose with
+   the NAS's own, so build steps must keep working with the existing Dockerfiles (e.g. the API image
+   runs `npx tsc prisma/seed.ts ...`, which breaks under TypeScript 6 — hence `@nestjs/cli` 11 + TS 5.9),
+   and avoid renaming files a framework discovers by name (e.g. `apps/web/middleware.ts`): if the
+   old file is not deleted on the NAS, Next 16 fails when both `middleware.ts` and `proxy.ts` exist.
+   Keep the cookie names (`token`, `oidc_tx`, `wreath_*`) — they must
    not collide with another company dashboard on the same host.
    Integration values (OIDC, Solapi, Anthropic) can also be set by admins at 설정 > 외부 연동
    (`settings/integration-settings.service.ts`): stored AES-256-GCM encrypted in
