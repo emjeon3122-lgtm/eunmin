@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // 빌드 결과를 dist/main.js 처럼 src 기준으로 둔다(Dockerfile·create-admin 안내가 이 경로를 쓴다).
+    "rootDir": "./src",
+    // 증분 빌드 기록을 dist 안에 둔다 — rootDir 를 src 로 바꾸면 기본 위치가 dist 바깥이 되는데,
+    // nest build 는 매번 dist 를 지우므로 기록만 남아 다음 빌드가 바뀐 파일만 내보내 dist 가 비게 된다.
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
+  },
+  "exclude": ["node_modules", "dist", "dist-seed", "prisma"]
+}

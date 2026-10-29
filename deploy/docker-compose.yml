@@ -1,0 +1,63 @@
+# 경조사 화환 앱 — NAS(Synology Container Manager) 운영용 구성
+#
+#   사용자 → Cloudflare → cloudflared(Tunnel) → web:3000 → (내부) api:4000 → /data(DB·사진)
+#
+# - 외부에서 들어오는 연결은 Tunnel뿐이다. 호스트 포트를 하나도 열지 않는다(ports 없음).
+# - Tunnel의 공개 호스트 연결 대상은 http://web:3000 하나다.
+# - 데이터는 DATA_DIR(NAS 전용 폴더) 한 곳에만 저장되어 컨테이너를 지우고 다시 만들어도 남는다.
+# - 설정값은 같은 폴더의 .env에서 읽는다(.env.example 참고).
+
+name: wreath
+
+services:
+  api:
+    build: ../apps/api
+    image: wreath-api:latest
+    restart: unless-stopped
+    user: "${APP_UID:?.env에 APP_UID를 지정하세요}:${APP_GID:?.env에 APP_GID를 지정하세요}"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      TZ: Asia/Seoul
+      # 컨테이너 안 경로는 고정이고, NAS 쪽 실제 위치는 아래 volumes의 DATA_DIR로 정한다.
+      DATABASE_URL: file:/data/db/wreath.db
+      STORAGE_LOCAL_DIR: /data/uploads
+      CORS_ORIGIN: ${APP_BASE_URL}
+    volumes:
+      - ${DATA_DIR:?.env에 DATA_DIR(NAS 전용 폴더 경로)를 지정하세요}:/data
+    networks: [wreath]
+    logging: &logging
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  web:
+    build:
+      context: ../apps/web
+      args:
+        NEXT_PUBLIC_API_BASE_URL: /api
+        API_INTERNAL_URL: http://api:4000
+    image: wreath-web:latest
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Seoul
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [wreath]
+    logging: *logging
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?.env에 CLOUDFLARE_TUNNEL_TOKEN을 지정하세요}
+    depends_on:
+      web:
+        condition: service_healthy
+    networks: [wreath]
+    logging: *logging
+
+networks:
+  wreath: {}
